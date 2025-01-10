@@ -180,13 +180,13 @@ function HomeSection({ player }) {
   ];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Key Insights (Top 3 strengths, etc.) */}
       <SwipeableInsights player={player} />
       
       {/* Radar Chart for 6 main categories */}
-      <div className="bg-gray-800 p-4 rounded-lg shadow-md">
-        <h2 className="text-lg font-semibold text-gray-100 mb-3">
+      <div className="bg-gray-800 p-5 rounded-lg shadow-md">
+        <h2 className="text-lg font-semibold text-gray-100 mb-4 mt-0">
           Category Averages
         </h2>
         <div className="w-full h-64">

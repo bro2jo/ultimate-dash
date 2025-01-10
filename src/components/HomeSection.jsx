@@ -2,103 +2,48 @@
 
 import React, { useEffect, useState } from 'react';
 import InsightsSection from './InsightsSection';
-import { Radar } from 'react-chartjs-2';
-import {
-  Chart as ChartJS,
-  RadialLinearScale,
-  PointElement,
-  LineElement,
-  Filler,
-  Tooltip,
-  Legend,
-} from 'chart.js';
+import RadarChart from './RadarChart';
 
-ChartJS.register(
-  RadialLinearScale,
-  PointElement,
-  LineElement,
-  Filler,
-  Tooltip,
-  Legend
-);
-
-function HomeSection({ player, averages }) {
-  // Optionally, store chart data in local state
-  const [radarData, setRadarData] = useState(null);
+function HomeSection({ player }) {
+  const [averages, setAverages] = useState({
+    mental: 0,
+    physical: 0,
+    cutting: 0,
+    handling: 0,
+    throwing: 0,
+    defensive: 0,
+    offensive: 0,
+  });
 
   useEffect(() => {
-    // Construct the data for the radar chart
-    const labels = ['Mental', 'Physical', 'Cutting', 'Throwing', 'Defense', 'Handling'];
-    const values = [
-      averages.mental,
-      averages.physical,
-      averages.cutting,
-      averages.throwing,
-      averages.defense,
-      averages.handling,
-    ];
+    const avg = computeCategoryAverages(player);
+    setAverages(avg);
+  }, [player]);
 
-    const newData = {
-      labels,
-      datasets: [
-        {
-          label: 'Category Averages',
-          data: values,
-          backgroundColor: 'rgba(16, 185, 129, 0.2)', // emerald-500 at 20% opacity
-          borderColor: 'rgba(16, 185, 129, 1)',        // emerald-500
-          borderWidth: 2,
-          pointBackgroundColor: 'rgba(16, 185, 129, 1)',
-        },
-      ],
-    };
-    setRadarData(newData);
-  }, [averages]);
-
-  const radarOptions = {
-    scales: {
-      r: {
-        beginAtZero: true,
-        max: 10,
-        ticks: {
-          color: '#e2e8f0', // text-gray-200
-          backdropColor: 'transparent',
-        },
-        grid: {
-          color: '#4b5563', // text-gray-600
-        },
-        angleLines: {
-          color: '#4b5563', // text-gray-600
-        },
-        pointLabels: {
-          color: '#e2e8f0', // text-gray-200
-        },
-      },
-    },
-    plugins: {
-      legend: {
-        labels: {
-          color: '#e2e8f0', // text-gray-200
-        },
-      },
-    },
-    responsive: true,
-    maintainAspectRatio: false,
-  };
+  const radarLabels = ['Mental', 'Physical', 'Cutting', 'Handling', 'Throwing', 'Defense'];
+  const radarDataValues = [
+    averages.mental,
+    averages.physical,
+    averages.cutting,
+    averages.handling,
+    averages.throwing,
+    averages.defensive,
+  ];
 
   return (
-    <div className="space-y-6">
-      {/* 1) Key Insights */}
+    <div className="space-y-4">
+      {/* Key Insights */}
       <InsightsSection player={player} />
 
-      {/* 2) Radar Chart */}
-      <div className="bg-gray-800 rounded-lg p-4 shadow-md">
-        <h2 className="text-lg font-semibold text-gray-100 mb-3">
-          Overall Averages
-        </h2>
-        <div className="w-full h-64">
-          {radarData && (
-            <Radar data={radarData} options={radarOptions} />
-          )}
+      {/* Category Averages Card */}
+      <div className="bg-gray-800 rounded-lg shadow-md">
+        <div className="p-3 pb-2"> {/* Reduced bottom padding */}
+          <h2 className="text-lg font-semibold text-gray-100 mb-2">
+            Category Averages
+          </h2>
+          <div className="w-full">
+            <RadarChart labels={radarLabels} dataValues={radarDataValues} />
+          </div>
         </div>
       </div>
     </div>

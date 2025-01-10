@@ -1,5 +1,3 @@
-// src/components/RadarChart.jsx
-
 import React from 'react';
 import { Radar } from 'react-chartjs-2';
 import {
@@ -26,12 +24,16 @@ const RadarChart = ({ labels, dataValues }) => {
     labels,
     datasets: [
       {
-        label: 'Throw Ratings',
         data: dataValues,
-        backgroundColor: 'rgba(16, 185, 129, 0.2)',  // emerald-500 @ 20%
-        borderColor: 'rgba(16, 185, 129, 1)',         // emerald-500
+        backgroundColor: 'rgba(16, 185, 129, 0.2)',
+        borderColor: 'rgba(16, 185, 129, 1)',
         borderWidth: 2,
         pointBackgroundColor: 'rgba(16, 185, 129, 1)',
+        pointBorderColor: '#fff',
+        pointHoverBackgroundColor: '#fff',
+        pointHoverBorderColor: 'rgba(16, 185, 129, 1)',
+        pointRadius: 2.5,
+        pointHoverRadius: 4,
       },
     ],
   };
@@ -42,33 +44,58 @@ const RadarChart = ({ labels, dataValues }) => {
         beginAtZero: true,
         max: 10,
         ticks: {
-          color: '#e2e8f0',   // text-gray-200
+          stepSize: 2,
+          display: false,
           backdropColor: 'transparent',
         },
         grid: {
-          color: '#4b5563',   // text-gray-600
+          color: '#4b5563',
+          lineWidth: 1,
         },
         angleLines: {
-          color: '#4b5563',   // text-gray-600
+          color: '#4b5563',
+          lineWidth: 1,
         },
         pointLabels: {
-          color: '#e2e8f0',   // text-gray-200
+          color: '#e2e8f0',
+          font: {
+            size: 11,
+            family: 'Inter',
+          },
+          padding: 8,
         },
       },
     },
     plugins: {
       legend: {
-        labels: {
-          color: '#e2e8f0',  // text-gray-200
+        display: false,
+      },
+      tooltip: {
+        enabled: true,
+        backgroundColor: 'rgba(17, 24, 39, 0.95)',
+        padding: 8,
+        titleFont: {
+          size: 12,
+          family: 'Inter',
+        },
+        bodyFont: {
+          size: 11,
+          family: 'Inter',
+        },
+        displayColors: false,
+        callbacks: {
+          title: (items) => labels[items[0].dataIndex],
+          label: (item) => `${item.formattedValue}/10`
         },
       },
     },
     responsive: true,
-    maintainAspectRatio: false,
+    maintainAspectRatio: true,
+    aspectRatio: 1.2, // This controls the aspect ratio of the chart
   };
 
   return (
-    <div className="w-full max-w-md mx-auto h-64">
+    <div className="w-full aspect-[1.2]"> {/* Match the aspectRatio from options */}
       <Radar data={data} options={options} />
     </div>
   );

@@ -4,10 +4,15 @@ import { motion, AnimatePresence, useAnimation } from 'framer-motion';
 const SWIPE_THRESHOLD = 30;
 const VELOCITY_THRESHOLD = 200;
 
-const InsightsCard = ({ title, data }) => (
+const InsightsCard = ({ title, data, subtitle }) => (
   <div className="bg-gray-800 p-4 rounded-lg shadow-md w-full">
     <div className="text-gray-300 text-xs font-bold uppercase tracking-widest mb-2">
       <span className="font-semibold text-emerald-400">{title}</span>
+      {subtitle && (
+        <span className="block text-gray-400 text-xs mt-1 normal-case">
+          {subtitle}
+        </span>
+      )}
     </div>
     {data.map(([skillKey, skillValue], index) => (
       <div key={index} className="flex justify-between mb-1">
@@ -27,6 +32,13 @@ const SwipeableInsights = ({ player }) => {
   const [isDragging, setIsDragging] = useState(false);
   const controls = useAnimation();
   const [containerWidth, setContainerWidth] = useState(0);
+
+  // Mock growth targets - in a real app, this would come from user data
+  const growthTargets = [
+    ['laying_out', player.laying_out],
+    ['endurance', player.endurance],
+    ['vertical_leap', player.vertical_leap]
+  ];
 
   useEffect(() => {
     const updateWidth = () => {
@@ -50,16 +62,16 @@ const SwipeableInsights = ({ player }) => {
 
   const cards = [
     {
-      title: 'Top Strengths',
+      title: 'Current Growth Targets',
+      data: growthTargets
+    },
+    {
+      title: 'Top 3 Strengths',
       data: getSortedSkills().slice(0, 3)
     },
     {
       title: 'Areas for Improvement',
       data: getSortedSkills().reverse().slice(0, 3)
-    },
-    {
-      title: 'Recent Highlights',
-      data: getSortedSkills().slice(3, 6)
     }
   ];
 
@@ -97,11 +109,9 @@ const SwipeableInsights = ({ player }) => {
         setCurrentIndex(nextIndex);
         snapToIndex(nextIndex);
       } else {
-        // Snap back to current index if we're at the bounds
         snapToIndex(currentIndex);
       }
     } else {
-      // Snap back to current index if swipe wasn't strong enough
       snapToIndex(currentIndex);
     }
   };
