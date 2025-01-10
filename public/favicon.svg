@@ -9,19 +9,15 @@
     
     <!-- Main circle with subtle shadow -->
     <circle cx="32" cy="32" r="30" fill="url(#grad)" />
-    
-    <!-- Stylized "U" representing both Ultimate and User skills -->
-    <path d="M20 15 L20 40 Q20 49 32 49 Q44 49 44 40 L44 15" 
-          stroke="white" 
+
+    <!-- Slightly smaller and centered "U" for more padding -->
+    <path d="M22 18 L22 38 Q22 47 32 47 Q42 47 42 38 L42 18" 
+          stroke="#ffffff" 
           fill="none" 
           stroke-width="6" 
           stroke-linecap="round"
           stroke-linejoin="round" />
-    
-    <!-- Skill indicator dot matching the radar chart points -->
-    <circle cx="32" cy="40" r="3" fill="white" />
-    
-    <!-- Additional subtle skill point indicators matching the radar chart style -->
-    <circle cx="32" cy="35" r="1.5" fill="white" opacity="0.6" />
-    <circle cx="32" cy="30" r="1.5" fill="white" opacity="0.3" />
+
+    <!-- Adjusted skill indicator dot to align with resized "U" -->
+    <circle cx="32" cy="38" r="2.5" fill="#ffffff" />
 </svg>
