@@ -1,6 +1,6 @@
 Project: performance-app
 Version: 0.1.0
-Generated: 2025-01-10T22:12:22.942Z
+Generated: 2025-01-10T22:54:49.774Z
 ================================================================================
 
 File: concat-files.js
@@ -274,6 +274,16 @@ File: src\App.css
   justify-content: center;
   font-size: calc(10px + 2vmin);
   color: white;
+}
+/* Ensure dropdowns are visible globally */
+.dropdown-container {
+  position: relative;
+  z-index: 1;
+}
+
+.dropdown-menu {
+  position: absolute;
+  z-index: 9999; /* Always on top */
 }
 
 .App-link {
@@ -1001,109 +1011,143 @@ export default OverallScoreRing;
 File: src\components\ProfileHeader.jsx
 ================================================================================
 
-// src/components/ProfileHeader.jsx
-
 import React, { useState, useRef, useEffect } from 'react';
-import OverallScoreRing from './OverallScoreRing';
-import backgroundImage from '../assets/background.jpg'; // Ensure this path is correct
 import { ChevronDown } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useNavigate } from 'react-router-dom'; // Import useNavigate
+import { useNavigate } from 'react-router-dom';
+import OverallScoreRing from './OverallScoreRing';
+import backgroundImage from '../assets/background.jpg';
 
-const ProfileHeader = ({ name, email, overallScore, athletes, selectedAthleteId, onSelectAthlete }) => {
+const ProfileHeader = ({ 
+  name, 
+  email, 
+  overallScore, 
+  athletes, 
+  selectedAthleteId, 
+  onSelectAthlete 
+}) => {
   const [isOpen, setIsOpen] = useState(false);
-  const dropdownRef = useRef();
-  const navigate = useNavigate(); // Hook to navigate
+  const dropdownRef = useRef(null);
+  const navigate = useNavigate();
 
-  // Close dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
         setIsOpen(false);
       }
     };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Find the selected athlete
-  const selectedAthlete = athletes.find(a => a.id === selectedAthleteId);
+  const selectedAthlete = athletes?.find(a => a.id === selectedAthleteId);
 
   if (!selectedAthlete) {
     return (
-      <div className="text-center text-gray-300 py-10">
-        Loading athlete data...
+      <div className="flex items-center justify-center h-56 bg-gray-800 rounded-lg">
+        <p className="text-gray-300">Loading athlete data...</p>
       </div>
     );
   }
+
+  const menuVariants = {
+    closed: {
+      opacity: 0,
+      scaleY: 0,
+      transition: { duration: 0.2 }
+    },
+    open: {
+      opacity: 1,
+      scaleY: 1,
+      transition: { duration: 0.2 }
+    }
+  };
+
+  const handleAthleteSelect = (athlete) => {
+    onSelectAthlete(athlete.id);
+    navigate(`/?id=${athlete.id}&name=${encodeURIComponent(athlete.metadata.name)}`);
+    setIsOpen(false);
+  };
 
   return (
     <div className="relative w-full h-56 md:h-64 lg:h-72 bg-gray-800 rounded-lg overflow-hidden">
       {/* Background Image */}
       <img
         src={backgroundImage}
-        alt="Background"
+        alt=""
         className="absolute inset-0 w-full h-full object-cover opacity-60"
       />
-      {/* Overlay */}
-      <div className="absolute inset-0 bg-black bg-opacity-40"></div>
+      <div className="absolute inset-0 bg-black bg-opacity-40" />
 
       {/* Content */}
       <div className="relative z-10 flex flex-col items-center justify-center h-full px-4">
-        {/* User Info */}
         <div className="text-center">
           <h1 className="text-2xl md:text-3xl font-semibold text-white">{name}</h1>
           <p className="text-sm md:text-base text-gray-300 mt-1">{email}</p>
         </div>
 
-        {/* Overall Score Ring */}
         <div className="mt-4">
           <OverallScoreRing overallScore={overallScore} />
         </div>
       </div>
 
-      {/* Dropdown (Top-right corner) */}
-      <div ref={dropdownRef} className="absolute top-4 right-4 md:top-6 md:right-6 z-30">
-        <div
+      {/* Dropdown Container */}
+      <div ref={dropdownRef} className="absolute top-4 right-4 md:top-6 md:right-6 z-50">
+        {/* Toggle Button */}
+        <button
           onClick={() => setIsOpen(!isOpen)}
-          className="cursor-pointer p-2 rounded-full hover:bg-gray-700 transition"
+          className="flex items-center justify-center w-10 h-10 rounded-full 
+                   bg-gray-800/50 backdrop-blur-sm hover:bg-gray-700 
+                   transition-colors duration-200 focus:outline-none 
+                   focus:ring-2 focus:ring-emerald-500 focus:ring-opacity-50"
+          aria-expanded={isOpen}
+          aria-haspopup="listbox"
+          aria-controls="athlete-listbox"
         >
-          <ChevronDown className="w-6 h-6 text-white" />
-        </div>
+          <motion.div
+            animate={{ rotate: isOpen ? 180 : 0 }}
+            transition={{ duration: 0.2 }}
+          >
+            <ChevronDown className="w-5 h-5 text-white" />
+          </motion.div>
+        </button>
 
+        {/* Dropdown Menu */}
         <AnimatePresence>
           {isOpen && (
             <motion.div
-              className="mt-2 w-48 bg-gray-800 rounded-md shadow-xl z-50"
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              transition={{ duration: 0.2 }}
-            >
-              <ul className="py-1">
-                {athletes.map((athlete) => (
-                  <li key={athlete.id}>
-                    <button
-                      onClick={() => {
-                        onSelectAthlete(athlete.id);
-                        // Update the URL with both id and name
-                        navigate(`/?id=${athlete.id}&name=${encodeURIComponent(athlete.metadata.name)}`);
-                        setIsOpen(false);
-                      }}
-                      className={`w-full text-left px-4 py-2 text-sm ${
-                        athlete.id === selectedAthleteId
-                          ? 'bg-gray-700 text-white'
-                          : 'text-gray-300 hover:bg-gray-700 hover:text-white'
-                      }`}
-                    >
-                      {athlete.metadata.name}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </motion.div>
+  initial="closed"
+  animate="open"
+  exit="closed"
+  variants={menuVariants}
+  style={{ transformOrigin: 'top' }}
+  className="absolute right-0 mt-2 w-64 bg-gray-800 rounded-lg shadow-lg 
+             ring-1 ring-black ring-opacity-5 z-50 max-h-64 overflow-y-auto"
+>
+  <ul
+    id="athlete-listbox"
+    role="listbox"
+    aria-label="Select athlete"
+    className="divide-y divide-gray-700"
+  >
+    {athletes.map((athlete) => (
+      <li key={athlete.id} role="option" aria-selected={athlete.id === selectedAthleteId}>
+        <button
+          onClick={() => handleAthleteSelect(athlete)}
+          className={`w-full text-left px-4 py-3 text-sm ${
+            athlete.id === selectedAthleteId
+              ? 'bg-gray-700 text-white'
+              : 'text-gray-300 hover:bg-gray-700 hover:text-white'
+          }`}
+        >
+          {athlete.metadata.name}
+        </button>
+      </li>
+    ))}
+  </ul>
+</motion.div>
+
           )}
         </AnimatePresence>
       </div>
@@ -1112,7 +1156,6 @@ const ProfileHeader = ({ name, email, overallScore, athletes, selectedAthleteId,
 };
 
 export default ProfileHeader;
-
 
 File: src\components\RadarChart.jsx
 ================================================================================
@@ -2141,83 +2184,6 @@ const mockData = [
   {
     id: 6,
     metadata: {
-      name: "Charles Vukovic",
-      email: "cavukovic@gmail.com",
-      ip: "68.109.206.199",
-      user_agent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36 Edg/131.0.0.0",
-      referrer: "https://ultimate-assessment.netlify.app/",
-      created_at: "2025-01-06T23:48:01.361Z",
-    },
-    skills: {
-      speed_explosiveness: 7,
-      endurance: 8,
-      vertical_leap: 7,
-      change_of_direction: 6,
-      boxing_out: 8,
-      laying_out: 4,
-      recovery: 5,
-      flexibility_mobility: 7,
-      injury_prevention: 6,
-      defensive_strategy: 8,
-      offensive_strategy: 6,
-      mental_game: 9,
-      feedback_implementation: 8,
-      isolation_cutting: 4,
-      continuation_cutting: 4,
-      angles: 4,
-      fakes_footwork: 6,
-      timing_field_vision: 3,
-      decisiveness: 5,
-      catching: 7,
-      zone_offense: 8,
-      reading_the_disc: 9,
-      normal_marking: 3,
-      sideline_trap_marking: 5,
-      downfield_defending: 6,
-      handler_defending: 4,
-      defensive_pattern_recognition: 7,
-      help_defense: 8,
-      switching_on_defense: 9,
-      zone_defense: 8,
-      defensive_mental_fortitude: 8,
-      handler_movement: 6,
-      poise_with_disc: 7,
-      breaking_the_mark: 7,
-      resetting_from_trap_sideline: 8,
-      decision_making_vision: 4,
-      flow_awareness: 3,
-      throw_and_go: 4,
-      offensive_pattern_recognition: 3,
-      backhand_power: 9,
-      backhand_accuracy: 7,
-      backhand_quick_release: 5,
-      backhand_release_variations: 6,
-      backhand_against_wind: 5,
-      backhand_against_difficult_marks: 5,
-      backhand_tempo_control: 5,
-      forehand_power: 7,
-      forehand_accuracy: 7,
-      forehand_quick_release: 5,
-      forehand_release_variations: 7,
-      forehand_against_wind: 5,
-      forehand_against_difficult_marks: 7,
-      forehand_tempo_control: 7,
-      specialty_power: 6,
-      specialty_accuracy: 6,
-      specialty_quick_release: 6,
-      specialty_release_variations: 5,
-      specialty_against_wind: 4,
-      specialty_against_difficult_marks: 5,
-      specialty_tempo_control: 6,
-      hucking_confidence: 8,
-      hucking_shape_control: 6,
-      hucking_tempo_control: 6,
-      hucking_placement: 6,
-    },
-  },
-  {
-    id: 7,
-    metadata: {
       name: "Anson Reppermund",
       email: "reprimand1000@gmail.com",
       ip: "108.39.240.253",
@@ -2293,7 +2259,7 @@ const mockData = [
     },
   },
   {
-    id: 8,
+    id: 7,
     metadata: {
       name: "Jonathan Mast",
       email: "jon1mast@gmail.com",
@@ -2662,6 +2628,16 @@ File: src\App.css
   font-size: calc(10px + 2vmin);
   color: white;
 }
+/* Ensure dropdowns are visible globally */
+.dropdown-container {
+  position: relative;
+  z-index: 1;
+}
+
+.dropdown-menu {
+  position: absolute;
+  z-index: 9999; /* Always on top */
+}
 
 .App-link {
   color: #61dafb;
@@ -3388,109 +3364,143 @@ export default OverallScoreRing;
 File: src\components\ProfileHeader.jsx
 ================================================================================
 
-// src/components/ProfileHeader.jsx
-
 import React, { useState, useRef, useEffect } from 'react';
-import OverallScoreRing from './OverallScoreRing';
-import backgroundImage from '../assets/background.jpg'; // Ensure this path is correct
 import { ChevronDown } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useNavigate } from 'react-router-dom'; // Import useNavigate
+import { useNavigate } from 'react-router-dom';
+import OverallScoreRing from './OverallScoreRing';
+import backgroundImage from '../assets/background.jpg';
 
-const ProfileHeader = ({ name, email, overallScore, athletes, selectedAthleteId, onSelectAthlete }) => {
+const ProfileHeader = ({ 
+  name, 
+  email, 
+  overallScore, 
+  athletes, 
+  selectedAthleteId, 
+  onSelectAthlete 
+}) => {
   const [isOpen, setIsOpen] = useState(false);
-  const dropdownRef = useRef();
-  const navigate = useNavigate(); // Hook to navigate
+  const dropdownRef = useRef(null);
+  const navigate = useNavigate();
 
-  // Close dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
         setIsOpen(false);
       }
     };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Find the selected athlete
-  const selectedAthlete = athletes.find(a => a.id === selectedAthleteId);
+  const selectedAthlete = athletes?.find(a => a.id === selectedAthleteId);
 
   if (!selectedAthlete) {
     return (
-      <div className="text-center text-gray-300 py-10">
-        Loading athlete data...
+      <div className="flex items-center justify-center h-56 bg-gray-800 rounded-lg">
+        <p className="text-gray-300">Loading athlete data...</p>
       </div>
     );
   }
+
+  const menuVariants = {
+    closed: {
+      opacity: 0,
+      scaleY: 0,
+      transition: { duration: 0.2 }
+    },
+    open: {
+      opacity: 1,
+      scaleY: 1,
+      transition: { duration: 0.2 }
+    }
+  };
+
+  const handleAthleteSelect = (athlete) => {
+    onSelectAthlete(athlete.id);
+    navigate(`/?id=${athlete.id}&name=${encodeURIComponent(athlete.metadata.name)}`);
+    setIsOpen(false);
+  };
 
   return (
     <div className="relative w-full h-56 md:h-64 lg:h-72 bg-gray-800 rounded-lg overflow-hidden">
       {/* Background Image */}
       <img
         src={backgroundImage}
-        alt="Background"
+        alt=""
         className="absolute inset-0 w-full h-full object-cover opacity-60"
       />
-      {/* Overlay */}
-      <div className="absolute inset-0 bg-black bg-opacity-40"></div>
+      <div className="absolute inset-0 bg-black bg-opacity-40" />
 
       {/* Content */}
       <div className="relative z-10 flex flex-col items-center justify-center h-full px-4">
-        {/* User Info */}
         <div className="text-center">
           <h1 className="text-2xl md:text-3xl font-semibold text-white">{name}</h1>
           <p className="text-sm md:text-base text-gray-300 mt-1">{email}</p>
         </div>
 
-        {/* Overall Score Ring */}
         <div className="mt-4">
           <OverallScoreRing overallScore={overallScore} />
         </div>
       </div>
 
-      {/* Dropdown (Top-right corner) */}
-      <div ref={dropdownRef} className="absolute top-4 right-4 md:top-6 md:right-6 z-30">
-        <div
+      {/* Dropdown Container */}
+      <div ref={dropdownRef} className="absolute top-4 right-4 md:top-6 md:right-6 z-50">
+        {/* Toggle Button */}
+        <button
           onClick={() => setIsOpen(!isOpen)}
-          className="cursor-pointer p-2 rounded-full hover:bg-gray-700 transition"
+          className="flex items-center justify-center w-10 h-10 rounded-full 
+                   bg-gray-800/50 backdrop-blur-sm hover:bg-gray-700 
+                   transition-colors duration-200 focus:outline-none 
+                   focus:ring-2 focus:ring-emerald-500 focus:ring-opacity-50"
+          aria-expanded={isOpen}
+          aria-haspopup="listbox"
+          aria-controls="athlete-listbox"
         >
-          <ChevronDown className="w-6 h-6 text-white" />
-        </div>
+          <motion.div
+            animate={{ rotate: isOpen ? 180 : 0 }}
+            transition={{ duration: 0.2 }}
+          >
+            <ChevronDown className="w-5 h-5 text-white" />
+          </motion.div>
+        </button>
 
+        {/* Dropdown Menu */}
         <AnimatePresence>
           {isOpen && (
             <motion.div
-              className="mt-2 w-48 bg-gray-800 rounded-md shadow-xl z-50"
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              transition={{ duration: 0.2 }}
-            >
-              <ul className="py-1">
-                {athletes.map((athlete) => (
-                  <li key={athlete.id}>
-                    <button
-                      onClick={() => {
-                        onSelectAthlete(athlete.id);
-                        // Update the URL with both id and name
-                        navigate(`/?id=${athlete.id}&name=${encodeURIComponent(athlete.metadata.name)}`);
-                        setIsOpen(false);
-                      }}
-                      className={`w-full text-left px-4 py-2 text-sm ${
-                        athlete.id === selectedAthleteId
-                          ? 'bg-gray-700 text-white'
-                          : 'text-gray-300 hover:bg-gray-700 hover:text-white'
-                      }`}
-                    >
-                      {athlete.metadata.name}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </motion.div>
+  initial="closed"
+  animate="open"
+  exit="closed"
+  variants={menuVariants}
+  style={{ transformOrigin: 'top' }}
+  className="absolute right-0 mt-2 w-64 bg-gray-800 rounded-lg shadow-lg 
+             ring-1 ring-black ring-opacity-5 z-50 max-h-64 overflow-y-auto"
+>
+  <ul
+    id="athlete-listbox"
+    role="listbox"
+    aria-label="Select athlete"
+    className="divide-y divide-gray-700"
+  >
+    {athletes.map((athlete) => (
+      <li key={athlete.id} role="option" aria-selected={athlete.id === selectedAthleteId}>
+        <button
+          onClick={() => handleAthleteSelect(athlete)}
+          className={`w-full text-left px-4 py-3 text-sm ${
+            athlete.id === selectedAthleteId
+              ? 'bg-gray-700 text-white'
+              : 'text-gray-300 hover:bg-gray-700 hover:text-white'
+          }`}
+        >
+          {athlete.metadata.name}
+        </button>
+      </li>
+    ))}
+  </ul>
+</motion.div>
+
           )}
         </AnimatePresence>
       </div>
@@ -3499,7 +3509,6 @@ const ProfileHeader = ({ name, email, overallScore, athletes, selectedAthleteId,
 };
 
 export default ProfileHeader;
-
 
 File: src\components\RadarChart.jsx
 ================================================================================
@@ -4528,83 +4537,6 @@ const mockData = [
   {
     id: 6,
     metadata: {
-      name: "Charles Vukovic",
-      email: "cavukovic@gmail.com",
-      ip: "68.109.206.199",
-      user_agent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36 Edg/131.0.0.0",
-      referrer: "https://ultimate-assessment.netlify.app/",
-      created_at: "2025-01-06T23:48:01.361Z",
-    },
-    skills: {
-      speed_explosiveness: 7,
-      endurance: 8,
-      vertical_leap: 7,
-      change_of_direction: 6,
-      boxing_out: 8,
-      laying_out: 4,
-      recovery: 5,
-      flexibility_mobility: 7,
-      injury_prevention: 6,
-      defensive_strategy: 8,
-      offensive_strategy: 6,
-      mental_game: 9,
-      feedback_implementation: 8,
-      isolation_cutting: 4,
-      continuation_cutting: 4,
-      angles: 4,
-      fakes_footwork: 6,
-      timing_field_vision: 3,
-      decisiveness: 5,
-      catching: 7,
-      zone_offense: 8,
-      reading_the_disc: 9,
-      normal_marking: 3,
-      sideline_trap_marking: 5,
-      downfield_defending: 6,
-      handler_defending: 4,
-      defensive_pattern_recognition: 7,
-      help_defense: 8,
-      switching_on_defense: 9,
-      zone_defense: 8,
-      defensive_mental_fortitude: 8,
-      handler_movement: 6,
-      poise_with_disc: 7,
-      breaking_the_mark: 7,
-      resetting_from_trap_sideline: 8,
-      decision_making_vision: 4,
-      flow_awareness: 3,
-      throw_and_go: 4,
-      offensive_pattern_recognition: 3,
-      backhand_power: 9,
-      backhand_accuracy: 7,
-      backhand_quick_release: 5,
-      backhand_release_variations: 6,
-      backhand_against_wind: 5,
-      backhand_against_difficult_marks: 5,
-      backhand_tempo_control: 5,
-      forehand_power: 7,
-      forehand_accuracy: 7,
-      forehand_quick_release: 5,
-      forehand_release_variations: 7,
-      forehand_against_wind: 5,
-      forehand_against_difficult_marks: 7,
-      forehand_tempo_control: 7,
-      specialty_power: 6,
-      specialty_accuracy: 6,
-      specialty_quick_release: 6,
-      specialty_release_variations: 5,
-      specialty_against_wind: 4,
-      specialty_against_difficult_marks: 5,
-      specialty_tempo_control: 6,
-      hucking_confidence: 8,
-      hucking_shape_control: 6,
-      hucking_tempo_control: 6,
-      hucking_placement: 6,
-    },
-  },
-  {
-    id: 7,
-    metadata: {
       name: "Anson Reppermund",
       email: "reprimand1000@gmail.com",
       ip: "108.39.240.253",
@@ -4680,7 +4612,7 @@ const mockData = [
     },
   },
   {
-    id: 8,
+    id: 7,
     metadata: {
       name: "Jonathan Mast",
       email: "jon1mast@gmail.com",

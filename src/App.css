@@ -23,6 +23,16 @@
   font-size: calc(10px + 2vmin);
   color: white;
 }
+/* Ensure dropdowns are visible globally */
+.dropdown-container {
+  position: relative;
+  z-index: 1;
+}
+
+.dropdown-menu {
+  position: absolute;
+  z-index: 9999; /* Always on top */
+}
 
 .App-link {
   color: #61dafb;
