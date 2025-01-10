@@ -1,11 +1,12 @@
 // src/components/InsightsSection.jsx
 
 import React from 'react';
+import { METADATA_KEYS } from '../utils/constants';
 
 const InsightsSection = ({ player }) => {
   // Example logic: find top 3 skills (by numeric value)
   const skillEntries = Object.entries(player).filter(([key, val]) => {
-    return typeof val === 'number';
+    return typeof val === 'number' && !METADATA_KEYS.includes(key);
   });
 
   // Sort descending by value

@@ -1,6 +1,6 @@
 Project: performance-app
 Version: 0.1.0
-Generated: 2025-01-10T21:52:03.736Z
+Generated: 2025-01-10T22:12:22.942Z
 ================================================================================
 
 File: concat-files.js
@@ -296,148 +296,23 @@ File: src\App.jsx
 // src/App.jsx
 
 import React, { useState, useEffect } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom'; // Import both hooks
+import { useLocation, useNavigate } from 'react-router-dom';
 import mockData from './data/mockData';
-
-// Import your existing components
 import ProfileHeader from './components/ProfileHeader';
 import SwipeableInsights from './components/SwipeableInsights';
 import CategorySection from './components/CategorySection';
 import RadarChart from './components/RadarChart';
 import OffensiveSection from './components/OffensiveSection';
 import RadialTabs from './components/RadialTabs';
+import { computeCategoryAverages, computeOverallScore } from './utils/helpers';
 
 import './index.css';
-
-/* -------------------------------------
-   1) HELPER FUNCTIONS
--------------------------------------- */
-
-// A small utility to average numeric values for a given list of keys
-function averageOfKeys(player, keys) {
-  let sum = 0, count = 0;
-  for (const key of keys) {
-    if (typeof player[key] === 'number') {
-      sum += player[key];
-      count++;
-    }
-  }
-  return count === 0 ? 0 : parseFloat((sum / count).toFixed(1));
-}
-
-// Compute category averages for Mental, Physical, Cutting, Throwing, Defense, Handling, Offensive
-function computeCategoryAverages(player) {
-  // Define keys for each category
-  const categories = {
-    mental: [
-      'mental_game',
-      'feedback_implementation',
-      'injury_prevention',
-      'recovery',
-      'flexibility_mobility',
-    ],
-    physical: [
-      'speed_explosiveness',
-      'endurance',
-      'vertical_leap',
-      'change_of_direction',
-      'boxing_out',
-      'laying_out',
-      'recovery',
-      'flexibility_mobility',
-      'injury_prevention',
-    ],
-    cutting: [
-      'angles',
-      'fakes_footwork',
-      'timing_field_vision',
-      'decisiveness',
-      'catching',
-      'flow_awareness',
-      'isolation_cutting',
-      'continuation_cutting',
-    ],
-    handling: [
-      'handler_movement',
-      'poise_with_disc',
-      'breaking_the_mark',
-      'resetting_from_trap_sideline',
-      'decision_making_vision',
-      'offensive_pattern_recognition',
-      'throw_and_go',
-    ],
-    throwing: [
-      // Backhand
-      'backhand_power',
-      'backhand_accuracy',
-      'backhand_quick_release',
-      'backhand_release_variations',
-      'backhand_against_wind',
-      'backhand_against_difficult_marks',
-      'backhand_tempo_control',
-      // Forehand
-      'forehand_power',
-      'forehand_accuracy',
-      'forehand_quick_release',
-      'forehand_release_variations',
-      'forehand_against_wind',
-      'forehand_against_difficult_marks',
-      'forehand_tempo_control',
-      // Specialty
-      'specialty_power',
-      'specialty_accuracy',
-      'specialty_quick_release',
-      'specialty_release_variations',
-      'specialty_against_wind',
-      'specialty_against_difficult_marks',
-      'specialty_tempo_control',
-      // Hucking
-      'hucking_confidence',
-      'hucking_shape_control',
-      'hucking_tempo_control',
-      'hucking_placement',
-    ],
-    defensive: [
-      'defensive_strategy',
-      'normal_marking',
-      'sideline_trap_marking',
-      'downfield_defending',
-      'handler_defending',
-      'defensive_pattern_recognition',
-      'help_defense',
-      'switching_on_defense',
-      'zone_defense',
-      'defensive_mental_fortitude',
-    ],
-  };
-
-  // Compute individual averages
-  const mental = averageOfKeys(player, categories.mental);
-  const physical = averageOfKeys(player, categories.physical);
-  const cutting = averageOfKeys(player, categories.cutting);
-  const handling = averageOfKeys(player, categories.handling);
-  const throwing = averageOfKeys(player, categories.throwing);
-  const defensive = averageOfKeys(player, categories.defensive);
-
-  // Offensive is the average of cutting, handling, and throwing
-  const offensive = parseFloat(((cutting + handling + throwing) / 3).toFixed(1));
-
-  return {
-    mental,
-    physical,
-    cutting,
-    handling,
-    throwing,
-    defensive,
-    offensive,
-  };
-}
 
 /* -------------------------------------
    2) HOME SECTION (DASHBOARD)
 -------------------------------------- */
 
-function HomeSection({ player }) {
+function HomeSection({ player }) { // player is the full athlete object
   const [averages, setAverages] = useState({
     mental: 0,
     physical: 0,
@@ -449,7 +324,7 @@ function HomeSection({ player }) {
   });
 
   useEffect(() => {
-    const avg = computeCategoryAverages(player);
+    const avg = computeCategoryAverages(player); // Accesses player.skills
     setAverages(avg);
   }, [player]);
 
@@ -467,7 +342,7 @@ function HomeSection({ player }) {
   return (
     <div className="mx-auto space-y-4">
       {/* Key Insights (Top 3 strengths, etc.) */}
-      <SwipeableInsights player={player} />
+      <SwipeableInsights player={player.skills} />
 
       {/* Radar Chart for 6 main categories */}
       <div className="bg-gray-800 p-5 rounded-lg shadow-md">
@@ -490,8 +365,8 @@ function HomeSection({ player }) {
 -------------------------------------- */
 
 function App() {
-  const location = useLocation();  // Hook to access the URL
-  const navigate = useNavigate();  // Hook to navigate programmatically
+  const location = useLocation();
+  const navigate = useNavigate();
 
   // 3.1) Manage Selected Athlete
   const [selectedAthleteId, setSelectedAthleteId] = useState(mockData[0].id);
@@ -516,18 +391,6 @@ function App() {
 
   // Find the selected athlete from mockData
   const selectedAthlete = mockData.find(athlete => athlete.id === selectedAthleteId);
-
-  // 3.3) Compute overall score (0-10) for user
-  const computeOverallScore = (p) => {
-    let sum = 0, count = 0;
-    for (const key in p) {
-      if (typeof p[key] === 'number') {
-        sum += p[key];
-        count++;
-      }
-    }
-    return count === 0 ? 0 : parseFloat((sum / count).toFixed(1));
-  };
 
   // 3.4) Group data into categories
   const getCategoryData = (p) => ({
@@ -641,12 +504,12 @@ function App() {
     'Specialty Accuracy',
   ];
   const radarDataValues = [
-    selectedAthlete.backhand_power,
-    selectedAthlete.forehand_power,
-    selectedAthlete.specialty_power,
-    selectedAthlete.backhand_accuracy,
-    selectedAthlete.forehand_accuracy,
-    selectedAthlete.specialty_accuracy,
+    selectedAthlete.skills.backhand_power,
+    selectedAthlete.skills.forehand_power,
+    selectedAthlete.skills.specialty_power,
+    selectedAthlete.skills.backhand_accuracy,
+    selectedAthlete.skills.forehand_accuracy,
+    selectedAthlete.skills.specialty_accuracy,
   ];
 
   /* -------------------------------------
@@ -656,8 +519,8 @@ function App() {
     <div className="min-h-screen bg-gray-900 text-gray-100 flex flex-col">
       {/** 1) Profile Header at the top */}
       <ProfileHeader
-        name={selectedAthlete.name}
-        email={selectedAthlete.email}
+        name={selectedAthlete.metadata.name}
+        email={selectedAthlete.metadata.email}
         overallScore={
           activeTab === 'home'
             ? computeOverallScore(selectedAthlete)
@@ -687,7 +550,7 @@ function App() {
           <CategorySection
             title="Physical Attributes"
             skills={getCategoryData(selectedAthlete).physical}
-            player={selectedAthlete}
+            player={selectedAthlete.skills}
           />
         )}
 
@@ -696,7 +559,7 @@ function App() {
           <>
             <OffensiveSection
               offensiveData={getCategoryData(selectedAthlete).offensive}
-              player={selectedAthlete}
+              player={selectedAthlete.skills}
             />
             {/* Example: A Throw Comparison Radar Chart */}
             <div className="mt-6">
@@ -713,7 +576,7 @@ function App() {
           <CategorySection
             title="Defensive Skills"
             skills={getCategoryData(selectedAthlete).defensive}
-            player={selectedAthlete}
+            player={selectedAthlete.skills}
           />
         )}
 
@@ -722,7 +585,7 @@ function App() {
           <CategorySection
             title="Mental & Recovery"
             skills={getCategoryData(selectedAthlete).mental}
-            player={selectedAthlete}
+            player={selectedAthlete.skills}
           />
         )}
       </div>
@@ -860,17 +723,79 @@ const CategorySection = ({ title, skills, player }) => {
 export default CategorySection;
 
 
+File: src\components\HomeSection.jsx
+================================================================================
+
+// src/components/HomeSection.jsx
+
+import React, { useState, useEffect } from 'react';
+import RadarChart from './RadarChart';
+import SwipeableInsights from './SwipeableInsights';
+import { computeCategoryAverages } from '../utils/helpers';
+
+function HomeSection({ player }) { // player is the full athlete object
+  const [averages, setAverages] = useState({
+    mental: 0,
+    physical: 0,
+    cutting: 0,
+    handling: 0,
+    throwing: 0,
+    defensive: 0,
+    offensive: 0,
+  });
+
+  useEffect(() => {
+    const avg = computeCategoryAverages(player); // Now accesses player.skills
+    setAverages(avg);
+  }, [player]);
+
+  // Radar chart data for 6 categories
+  const radarLabels = ['Mental', 'Physical', 'Cutting', 'Handling', 'Throwing', 'Defense'];
+  const radarDataValues = [
+    averages.mental,
+    averages.physical,
+    averages.cutting,
+    averages.handling,
+    averages.throwing,
+    averages.defensive,
+  ];
+
+  return (
+    <div className="mx-auto space-y-4">
+      {/* Key Insights (Top 3 strengths, etc.) */}
+      <SwipeableInsights player={player.skills} />
+
+      {/* Radar Chart for 6 main categories */}
+      <div className="bg-gray-800 p-5 rounded-lg shadow-md">
+        <h2 className="text-lg font-semibold text-gray-100 mb-4 mt-0">
+          Category Averages
+        </h2>
+        {/* Center the RadarChart */}
+        <div className="w-full flex justify-center">
+          <div className="w-80 h-80">
+            <RadarChart labels={radarLabels} dataValues={radarDataValues} />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default HomeSection;
+
+
 File: src\components\InsightsSection.jsx
 ================================================================================
 
 // src/components/InsightsSection.jsx
 
 import React from 'react';
+import { METADATA_KEYS } from '../utils/constants';
 
 const InsightsSection = ({ player }) => {
   // Example logic: find top 3 skills (by numeric value)
   const skillEntries = Object.entries(player).filter(([key, val]) => {
-    return typeof val === 'number';
+    return typeof val === 'number' && !METADATA_KEYS.includes(key);
   });
 
   // Sort descending by value
@@ -1164,7 +1089,7 @@ const ProfileHeader = ({ name, email, overallScore, athletes, selectedAthleteId,
                       onClick={() => {
                         onSelectAthlete(athlete.id);
                         // Update the URL with both id and name
-                        navigate(`/?id=${athlete.id}&name=${encodeURIComponent(athlete.name)}`);
+                        navigate(`/?id=${athlete.id}&name=${encodeURIComponent(athlete.metadata.name)}`);
                         setIsOpen(false);
                       }}
                       className={`w-full text-left px-4 py-2 text-sm ${
@@ -1173,7 +1098,7 @@ const ProfileHeader = ({ name, email, overallScore, athletes, selectedAthleteId,
                           : 'text-gray-300 hover:bg-gray-700 hover:text-white'
                       }`}
                     >
-                      {athlete.name}
+                      {athlete.metadata.name}
                     </button>
                   </li>
                 ))}
@@ -1192,7 +1117,7 @@ export default ProfileHeader;
 File: src\components\RadarChart.jsx
 ================================================================================
 
-/* src/components/RadarChart.jsx */
+// src/components/RadarChart.jsx
 
 import React from 'react';
 import { Radar } from 'react-chartjs-2';
@@ -1544,6 +1469,8 @@ export default SkillCard;
 File: src\components\SwipeableInsights.jsx
 ================================================================================
 
+// src/components/SwipeableInsights.jsx
+
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence, useAnimation } from 'framer-motion';
 
@@ -1573,13 +1500,13 @@ const InsightsCard = ({ title, data, subtitle }) => (
   </div>
 );
 
-const SwipeableInsights = ({ player }) => {
+const SwipeableInsights = ({ player }) => { // player is player.skills
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const controls = useAnimation();
   const [containerWidth, setContainerWidth] = useState(0);
 
-  // Mock growth targets - in a real app, this would come from user data
+  // Define growth targets based on skills
   const growthTargets = [
     ['laying_out', player.laying_out],
     ['endurance', player.endurance],
@@ -1723,6 +1650,7 @@ const SwipeableInsights = ({ player }) => {
 
 export default SwipeableInsights;
 
+
 File: src\components\Tabs.jsx
 ================================================================================
 
@@ -1827,141 +1755,619 @@ File: src\data\mockData.js
 const mockData = [
   {
     id: 1, // Unique identifier for each athlete
-    name: "Jonathan Mast",
-    email: "jon1mast@gmail.com",
-    speed_explosiveness: 4,
-    endurance: 3,
-    vertical_leap: 3,
-    change_of_direction: 5,
-    boxing_out: 7,
-    laying_out: 1,
-    recovery: 6,
-    flexibility_mobility: 7,
-    injury_prevention: 4,
-    defensive_strategy: 7,
-    offensive_strategy: 9,
-    mental_game: 9,
-    feedback_implementation: 10,
-    isolation_cutting: 3,
-    continuation_cutting: 4,
-    angles: 6,
-    fakes_footwork: 5,
-    timing_field_vision: 6,
-    decisiveness: 5,
-    catching: 9,
-    zone_offense: 8,
-    reading_the_disc: 9,
-    normal_marking: 8,
-    sideline_trap_marking: 9,
-    downfield_defending: 4,
-    handler_defending: 6,
-    defensive_pattern_recognition: 6,
-    help_defense: 8,
-    switching_on_defense: 8,
-    zone_defense: 6,
-    defensive_mental_fortitude: 4,
-    handler_movement: 10,
-    poise_with_disc: 10,
-    breaking_the_mark: 9,
-    resetting_from_trap_sideline: 9,
-    decision_making_vision: 8,
-    flow_awareness: 9,
-    throw_and_go: 8,
-    offensive_pattern_recognition: 9,
-    backhand_power: 9,
-    backhand_accuracy: 9,
-    backhand_quick_release: 9,
-    backhand_release_variations: 9,
-    backhand_against_wind: 8,
-    backhand_against_difficult_marks: 9,
-    backhand_tempo_control: 9,
-    forehand_power: 8,
-    forehand_accuracy: 9,
-    forehand_quick_release: 10,
-    forehand_release_variations: 10,
-    forehand_against_wind: 8,
-    forehand_against_difficult_marks: 10,
-    forehand_tempo_control: 10,
-    specialty_power: 8,
-    specialty_accuracy: 8,
-    specialty_quick_release: 8,
-    specialty_release_variations: 10,
-    specialty_against_wind: 6,
-    specialty_against_difficult_marks: 8,
-    specialty_tempo_control: 8,
-    hucking_confidence: 7,
-    hucking_shape_control: 7,
-    hucking_tempo_control: 7,
-    hucking_placement: 9
+    metadata: {
+      name: "Chris Doehring",
+      email: "doehring@umich.edu",
+      ip: "2600:387:15:4510::6",
+      user_agent: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_6_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.6 Mobile/15E148 Safari/604.1",
+      referrer: "https://ultimate-assessment.netlify.app/",
+      created_at: "2025-01-09T14:18:32.150Z",
+    },
+    skills: {
+      speed_explosiveness: 7,
+      endurance: 8,
+      vertical_leap: 3,
+      change_of_direction: 6,
+      boxing_out: 6,
+      laying_out: 6,
+      recovery: 7,
+      flexibility_mobility: 5,
+      injury_prevention: 7,
+      defensive_strategy: 7,
+      offensive_strategy: 8,
+      mental_game: 9,
+      feedback_implementation: 8,
+      isolation_cutting: 6,
+      continuation_cutting: 8,
+      angles: 7,
+      fakes_footwork: 5,
+      timing_field_vision: 7,
+      decisiveness: 7,
+      catching: 9,
+      zone_offense: 7,
+      reading_the_disc: 7,
+      normal_marking: 6,
+      sideline_trap_marking: 7,
+      downfield_defending: 4,
+      handler_defending: 7,
+      defensive_pattern_recognition: 6,
+      help_defense: 6,
+      switching_on_defense: 7,
+      zone_defense: 7,
+      defensive_mental_fortitude: 8,
+      handler_movement: 8,
+      poise_with_disc: 9,
+      breaking_the_mark: 8,
+      resetting_from_trap_sideline: 8,
+      decision_making_vision: 8,
+      flow_awareness: 8,
+      throw_and_go: 7,
+      offensive_pattern_recognition: 8,
+      backhand_power: 8,
+      backhand_accuracy: 7,
+      backhand_quick_release: 7,
+      backhand_release_variations: 7,
+      backhand_against_wind: 8,
+      backhand_against_difficult_marks: 7,
+      backhand_tempo_control: 8,
+      forehand_power: 4,
+      forehand_accuracy: 5,
+      forehand_quick_release: 7,
+      forehand_release_variations: 5,
+      forehand_against_wind: 4,
+      forehand_against_difficult_marks: 9,
+      forehand_tempo_control: 7,
+      specialty_power: 4,
+      specialty_accuracy: 8,
+      specialty_quick_release: 7,
+      specialty_release_variations: 5,
+      specialty_against_wind: 4,
+      specialty_against_difficult_marks: 5,
+      specialty_tempo_control: 6,
+      hucking_confidence: 7,
+      hucking_shape_control: 7,
+      hucking_tempo_control: 8,
+      hucking_placement: 7,
+    },
   },
   {
     id: 2,
-    name: "Emily Clark",
-    email: "emily.clark@example.com",
-    speed_explosiveness: 7,
-    endurance: 8,
-    vertical_leap: 6,
-    change_of_direction: 7,
-    boxing_out: 5,
-    laying_out: 4,
-    recovery: 7,
-    flexibility_mobility: 8,
-    injury_prevention: 6,
-    defensive_strategy: 8,
-    offensive_strategy: 7,
-    mental_game: 8,
-    feedback_implementation: 9,
-    isolation_cutting: 6,
-    continuation_cutting: 7,
-    angles: 7,
-    fakes_footwork: 8,
-    timing_field_vision: 7,
-    decisiveness: 8,
-    catching: 7,
-    zone_offense: 6,
-    reading_the_disc: 8,
-    normal_marking: 7,
-    sideline_trap_marking: 6,
-    downfield_defending: 7,
-    handler_defending: 7,
-    defensive_pattern_recognition: 7,
-    help_defense: 7,
-    switching_on_defense: 7,
-    zone_defense: 7,
-    defensive_mental_fortitude: 7,
-    handler_movement: 8,
-    poise_with_disc: 8,
-    breaking_the_mark: 7,
-    resetting_from_trap_sideline: 7,
-    decision_making_vision: 7,
-    flow_awareness: 7,
-    throw_and_go: 7,
-    offensive_pattern_recognition: 7,
-    backhand_power: 7,
-    backhand_accuracy: 7,
-    backhand_quick_release: 7,
-    backhand_release_variations: 7,
-    backhand_against_wind: 7,
-    backhand_against_difficult_marks: 7,
-    backhand_tempo_control: 7,
-    forehand_power: 7,
-    forehand_accuracy: 7,
-    forehand_quick_release: 7,
-    forehand_release_variations: 7,
-    forehand_against_wind: 7,
-    forehand_against_difficult_marks: 7,
-    forehand_tempo_control: 7,
-    specialty_power: 7,
-    specialty_accuracy: 7,
-    specialty_quick_release: 7,
-    specialty_release_variations: 7,
-    specialty_against_wind: 7,
-    specialty_against_difficult_marks: 7,
-    specialty_tempo_control: 7,
-    hucking_confidence: 7,
-    hucking_shape_control: 7,
-    hucking_tempo_control: 7,
-    hucking_placement: 7
+    metadata: {
+      name: "Rachel Graber",
+      email: "rachelgraber16@gmail.com",
+      ip: "104.36.4.125",
+      user_agent: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_1_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.1.1 Mobile/15E148 Safari/605.1.15 (Ecosia ios@10.5.2.2065)",
+      referrer: "https://ultimate-assessment.netlify.app/",
+      created_at: "2025-01-09T14:13:29.628Z",
+    },
+    skills: {
+      speed_explosiveness: 7,
+      endurance: 7,
+      vertical_leap: 4,
+      change_of_direction: 8,
+      boxing_out: 6,
+      laying_out: 7,
+      recovery: 8,
+      flexibility_mobility: 9,
+      injury_prevention: 8,
+      defensive_strategy: 8,
+      offensive_strategy: 5,
+      mental_game: 7,
+      feedback_implementation: 8,
+      isolation_cutting: 5,
+      continuation_cutting: 7,
+      angles: 6,
+      fakes_footwork: 7,
+      timing_field_vision: 7,
+      decisiveness: 4,
+      catching: 7,
+      zone_offense: 6,
+      reading_the_disc: 6,
+      normal_marking: 7,
+      sideline_trap_marking: 7,
+      downfield_defending: 7,
+      handler_defending: 8,
+      defensive_pattern_recognition: 6,
+      help_defense: 6,
+      switching_on_defense: 6,
+      zone_defense: 8,
+      defensive_mental_fortitude: 4,
+      handler_movement: 6,
+      poise_with_disc: 6,
+      breaking_the_mark: 4,
+      resetting_from_trap_sideline: 6,
+      decision_making_vision: 5,
+      flow_awareness: 5,
+      throw_and_go: 6,
+      offensive_pattern_recognition: 5,
+      backhand_power: 8,
+      backhand_accuracy: 7,
+      backhand_quick_release: 5,
+      backhand_release_variations: 5,
+      backhand_against_wind: 4,
+      backhand_against_difficult_marks: 5,
+      backhand_tempo_control: 5,
+      forehand_power: 7,
+      forehand_accuracy: 7,
+      forehand_quick_release: 5,
+      forehand_release_variations: 6,
+      forehand_against_wind: 3,
+      forehand_against_difficult_marks: 7,
+      forehand_tempo_control: 6,
+      specialty_power: 3,
+      specialty_accuracy: 3,
+      specialty_quick_release: 3,
+      specialty_release_variations: 3,
+      specialty_against_wind: 1,
+      specialty_against_difficult_marks: 3,
+      specialty_tempo_control: 2,
+      hucking_confidence: 7,
+      hucking_shape_control: 7,
+      hucking_tempo_control: 6,
+      hucking_placement: 6,
+    },
+  },
+  {
+    id: 3,
+    metadata: {
+      name: "Charlie Vukovic",
+      email: "cavukovic@gmail.com",
+      ip: "68.109.206.199",
+      user_agent: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_1_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/131.0.6778.154 Mobile/15E148 Safari/604.1",
+      referrer: "https://ultimate-assessment.netlify.app/",
+      created_at: "2025-01-07T22:04:37.985Z",
+    },
+    skills: {
+      speed_explosiveness: 6,
+      endurance: 8,
+      vertical_leap: 7,
+      change_of_direction: 6,
+      boxing_out: 8,
+      laying_out: 4,
+      recovery: 5,
+      flexibility_mobility: 6,
+      injury_prevention: 6,
+      defensive_strategy: 8,
+      offensive_strategy: 6,
+      mental_game: 9,
+      feedback_implementation: 7,
+      isolation_cutting: 6,
+      continuation_cutting: 6,
+      angles: 5,
+      fakes_footwork: 5,
+      timing_field_vision: 4,
+      decisiveness: 5,
+      catching: 7,
+      zone_offense: 6,
+      reading_the_disc: 7,
+      normal_marking: 3,
+      sideline_trap_marking: 5,
+      downfield_defending: 6,
+      handler_defending: 4,
+      defensive_pattern_recognition: 7,
+      help_defense: 8,
+      switching_on_defense: 8,
+      zone_defense: 8,
+      defensive_mental_fortitude: 8,
+      handler_movement: 5,
+      poise_with_disc: 7,
+      breaking_the_mark: 8,
+      resetting_from_trap_sideline: 8,
+      decision_making_vision: 4,
+      flow_awareness: 5,
+      throw_and_go: 5,
+      offensive_pattern_recognition: 5,
+      backhand_power: 9,
+      backhand_accuracy: 7,
+      backhand_quick_release: 6,
+      backhand_release_variations: 6,
+      backhand_against_wind: 8,
+      backhand_against_difficult_marks: 6,
+      backhand_tempo_control: 5,
+      forehand_power: 7,
+      forehand_accuracy: 7,
+      forehand_quick_release: 7,
+      forehand_release_variations: 7,
+      forehand_against_wind: 6,
+      forehand_against_difficult_marks: 7,
+      forehand_tempo_control: 7,
+      specialty_power: 7,
+      specialty_accuracy: 6,
+      specialty_quick_release: 6,
+      specialty_release_variations: 6,
+      specialty_against_wind: 4,
+      specialty_against_difficult_marks: 6,
+      specialty_tempo_control: 4,
+      hucking_confidence: 7,
+      hucking_shape_control: 6,
+      hucking_tempo_control: 6,
+      hucking_placement: 6,
+    },
+  },
+  {
+    id: 4,
+    metadata: {
+      name: "Mark Whitton",
+      email: "whittonm@mail.gvsu.edu",
+      ip: "2601:405:4700:1db0:411b:5a4c:ddba:1afb",
+      user_agent: "Mozilla/5.0 (iPhone; CPU iPhone OS 16_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.2 Mobile/15E148 Safari/604.1",
+      referrer: "https://ultimate-assessment.netlify.app/",
+      created_at: "2025-01-07T02:07:01.581Z",
+    },
+    skills: {
+      speed_explosiveness: 7,
+      endurance: 6,
+      vertical_leap: 7,
+      change_of_direction: 5,
+      boxing_out: 5,
+      laying_out: 7,
+      recovery: 4,
+      flexibility_mobility: 6,
+      injury_prevention: 6,
+      defensive_strategy: 8,
+      offensive_strategy: 7,
+      mental_game: 6,
+      feedback_implementation: 6,
+      isolation_cutting: 5,
+      continuation_cutting: 6,
+      angles: 6,
+      fakes_footwork: 3,
+      timing_field_vision: 7,
+      decisiveness: 3,
+      catching: 9,
+      zone_offense: 5,
+      reading_the_disc: 7,
+      normal_marking: 6,
+      sideline_trap_marking: 8,
+      downfield_defending: 6,
+      handler_defending: 4,
+      defensive_pattern_recognition: 6,
+      help_defense: 7,
+      switching_on_defense: 8,
+      zone_defense: 7,
+      defensive_mental_fortitude: 7,
+      handler_movement: 5,
+      poise_with_disc: 7,
+      breaking_the_mark: 4,
+      resetting_from_trap_sideline: 7,
+      decision_making_vision: 4,
+      flow_awareness: 6,
+      throw_and_go: 5,
+      offensive_pattern_recognition: 5,
+      backhand_power: 8,
+      backhand_accuracy: 7,
+      backhand_quick_release: 5,
+      backhand_release_variations: 6,
+      backhand_against_wind: 9,
+      backhand_against_difficult_marks: 6,
+      backhand_tempo_control: 7,
+      forehand_power: 9,
+      forehand_accuracy: 8,
+      forehand_quick_release: 6,
+      forehand_release_variations: 6,
+      forehand_against_wind: 8,
+      forehand_against_difficult_marks: 7,
+      forehand_tempo_control: 8,
+      specialty_power: 7,
+      specialty_accuracy: 7,
+      specialty_quick_release: 6,
+      specialty_release_variations: 7,
+      specialty_against_wind: 6,
+      specialty_against_difficult_marks: 6,
+      specialty_tempo_control: 6,
+      hucking_confidence: 9,
+      hucking_shape_control: 8,
+      hucking_tempo_control: 8,
+      hucking_placement: 8,
+    },
+  },
+  {
+    id: 5,
+    metadata: {
+      name: "Rachel Mast",
+      email: "rachelgerb520@gmail.com",
+      ip: "50.126.208.197",
+      user_agent: "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36",
+      referrer: "https://ultimate-assessment.netlify.app/",
+      created_at: "2025-01-07T01:55:25.039Z",
+    },
+    skills: {
+      speed_explosiveness: 8,
+      endurance: 8,
+      vertical_leap: 7,
+      change_of_direction: 8,
+      boxing_out: 7,
+      laying_out: 7,
+      recovery: 10,
+      flexibility_mobility: 8,
+      injury_prevention: 9,
+      defensive_strategy: 7,
+      offensive_strategy: 7,
+      mental_game: 9,
+      feedback_implementation: 9,
+      isolation_cutting: 9,
+      continuation_cutting: 9,
+      angles: 9,
+      fakes_footwork: 7,
+      timing_field_vision: 8,
+      decisiveness: 8,
+      catching: 9,
+      zone_offense: 8,
+      reading_the_disc: 8,
+      normal_marking: 8,
+      sideline_trap_marking: 8,
+      downfield_defending: 8,
+      handler_defending: 8,
+      defensive_pattern_recognition: 6,
+      help_defense: 8,
+      switching_on_defense: 8,
+      zone_defense: 7,
+      defensive_mental_fortitude: 7,
+      handler_movement: 7,
+      poise_with_disc: 6,
+      breaking_the_mark: 6,
+      resetting_from_trap_sideline: 7,
+      decision_making_vision: 8,
+      flow_awareness: 8,
+      throw_and_go: 8,
+      offensive_pattern_recognition: 5,
+      backhand_power: 2,
+      backhand_accuracy: 7,
+      backhand_quick_release: 8,
+      backhand_release_variations: 6,
+      backhand_against_wind: 5,
+      backhand_against_difficult_marks: 6,
+      backhand_tempo_control: 6,
+      forehand_power: 2,
+      forehand_accuracy: 6,
+      forehand_quick_release: 5,
+      forehand_release_variations: 5,
+      forehand_against_wind: 1,
+      forehand_against_difficult_marks: 5,
+      forehand_tempo_control: 5,
+      specialty_power: 1,
+      specialty_accuracy: 1,
+      specialty_quick_release: 1,
+      specialty_release_variations: 1,
+      specialty_against_wind: 1,
+      specialty_against_difficult_marks: 1,
+      specialty_tempo_control: 1,
+      hucking_confidence: 2,
+      hucking_shape_control: 2,
+      hucking_tempo_control: 2,
+      hucking_placement: 2,
+    },
+  },
+  {
+    id: 6,
+    metadata: {
+      name: "Charles Vukovic",
+      email: "cavukovic@gmail.com",
+      ip: "68.109.206.199",
+      user_agent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36 Edg/131.0.0.0",
+      referrer: "https://ultimate-assessment.netlify.app/",
+      created_at: "2025-01-06T23:48:01.361Z",
+    },
+    skills: {
+      speed_explosiveness: 7,
+      endurance: 8,
+      vertical_leap: 7,
+      change_of_direction: 6,
+      boxing_out: 8,
+      laying_out: 4,
+      recovery: 5,
+      flexibility_mobility: 7,
+      injury_prevention: 6,
+      defensive_strategy: 8,
+      offensive_strategy: 6,
+      mental_game: 9,
+      feedback_implementation: 8,
+      isolation_cutting: 4,
+      continuation_cutting: 4,
+      angles: 4,
+      fakes_footwork: 6,
+      timing_field_vision: 3,
+      decisiveness: 5,
+      catching: 7,
+      zone_offense: 8,
+      reading_the_disc: 9,
+      normal_marking: 3,
+      sideline_trap_marking: 5,
+      downfield_defending: 6,
+      handler_defending: 4,
+      defensive_pattern_recognition: 7,
+      help_defense: 8,
+      switching_on_defense: 9,
+      zone_defense: 8,
+      defensive_mental_fortitude: 8,
+      handler_movement: 6,
+      poise_with_disc: 7,
+      breaking_the_mark: 7,
+      resetting_from_trap_sideline: 8,
+      decision_making_vision: 4,
+      flow_awareness: 3,
+      throw_and_go: 4,
+      offensive_pattern_recognition: 3,
+      backhand_power: 9,
+      backhand_accuracy: 7,
+      backhand_quick_release: 5,
+      backhand_release_variations: 6,
+      backhand_against_wind: 5,
+      backhand_against_difficult_marks: 5,
+      backhand_tempo_control: 5,
+      forehand_power: 7,
+      forehand_accuracy: 7,
+      forehand_quick_release: 5,
+      forehand_release_variations: 7,
+      forehand_against_wind: 5,
+      forehand_against_difficult_marks: 7,
+      forehand_tempo_control: 7,
+      specialty_power: 6,
+      specialty_accuracy: 6,
+      specialty_quick_release: 6,
+      specialty_release_variations: 5,
+      specialty_against_wind: 4,
+      specialty_against_difficult_marks: 5,
+      specialty_tempo_control: 6,
+      hucking_confidence: 8,
+      hucking_shape_control: 6,
+      hucking_tempo_control: 6,
+      hucking_placement: 6,
+    },
+  },
+  {
+    id: 7,
+    metadata: {
+      name: "Anson Reppermund",
+      email: "reprimand1000@gmail.com",
+      ip: "108.39.240.253",
+      user_agent: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_1_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.1.1 Mobile/15E148 Safari/604.1",
+      referrer: "https://ultimate-assessment.netlify.app/",
+      created_at: "2025-01-06T23:35:25.293Z",
+    },
+    skills: {
+      speed_explosiveness: 9,
+      endurance: 5,
+      vertical_leap: 9,
+      change_of_direction: 4,
+      boxing_out: 7,
+      laying_out: 3,
+      recovery: 7,
+      flexibility_mobility: 4,
+      injury_prevention: 4,
+      defensive_strategy: 9,
+      offensive_strategy: 7,
+      mental_game: 8,
+      feedback_implementation: 6,
+      isolation_cutting: 6,
+      continuation_cutting: 5,
+      angles: 8,
+      fakes_footwork: 4,
+      timing_field_vision: 7,
+      decisiveness: 5,
+      catching: 6,
+      zone_offense: 7,
+      reading_the_disc: 9,
+      normal_marking: 5,
+      sideline_trap_marking: 8,
+      downfield_defending: 10,
+      handler_defending: 3,
+      defensive_pattern_recognition: 10,
+      help_defense: 10,
+      switching_on_defense: 9,
+      zone_defense: 8,
+      defensive_mental_fortitude: 7,
+      handler_movement: 8,
+      poise_with_disc: 6,
+      breaking_the_mark: 4,
+      resetting_from_trap_sideline: 7,
+      decision_making_vision: 7,
+      flow_awareness: 6,
+      throw_and_go: 5,
+      offensive_pattern_recognition: 5,
+      backhand_power: 8,
+      backhand_accuracy: 5,
+      backhand_quick_release: 8,
+      backhand_release_variations: 7,
+      backhand_against_wind: 7,
+      backhand_against_difficult_marks: 3,
+      backhand_tempo_control: 5,
+      forehand_power: 5,
+      forehand_accuracy: 6,
+      forehand_quick_release: 4,
+      forehand_release_variations: 4,
+      forehand_against_wind: 6,
+      forehand_against_difficult_marks: 5,
+      forehand_tempo_control: 5,
+      specialty_power: 6,
+      specialty_accuracy: 5,
+      specialty_quick_release: 5,
+      specialty_release_variations: 7,
+      specialty_against_wind: 3,
+      specialty_against_difficult_marks: 6,
+      specialty_tempo_control: 5,
+      hucking_confidence: 5,
+      hucking_shape_control: 6,
+      hucking_tempo_control: 5,
+      hucking_placement: 6,
+    },
+  },
+  {
+    id: 8,
+    metadata: {
+      name: "Jonathan Mast",
+      email: "jon1mast@gmail.com",
+      ip: "50.126.208.197",
+      user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0",
+      referrer: "https://ultimate-assessment.netlify.app/",
+      created_at: "2025-01-06T23:28:51.361Z",
+    },
+    skills: {
+      speed_explosiveness: 4,
+      endurance: 3,
+      vertical_leap: 3,
+      change_of_direction: 5,
+      boxing_out: 7,
+      laying_out: 1,
+      recovery: 6,
+      flexibility_mobility: 7,
+      injury_prevention: 4,
+      defensive_strategy: 7,
+      offensive_strategy: 9,
+      mental_game: 9,
+      feedback_implementation: 10,
+      isolation_cutting: 3,
+      continuation_cutting: 4,
+      angles: 6,
+      fakes_footwork: 5,
+      timing_field_vision: 6,
+      decisiveness: 5,
+      catching: 9,
+      zone_offense: 8,
+      reading_the_disc: 9,
+      normal_marking: 8,
+      sideline_trap_marking: 9,
+      downfield_defending: 4,
+      handler_defending: 6,
+      defensive_pattern_recognition: 6,
+      help_defense: 8,
+      switching_on_defense: 8,
+      zone_defense: 6,
+      defensive_mental_fortitude: 4,
+      handler_movement: 10,
+      poise_with_disc: 10,
+      breaking_the_mark: 9,
+      resetting_from_trap_sideline: 9,
+      decision_making_vision: 8,
+      flow_awareness: 9,
+      throw_and_go: 8,
+      offensive_pattern_recognition: 9,
+      backhand_power: 9,
+      backhand_accuracy: 9,
+      backhand_quick_release: 9,
+      backhand_release_variations: 9,
+      backhand_against_wind: 8,
+      backhand_against_difficult_marks: 9,
+      backhand_tempo_control: 9,
+      forehand_power: 8,
+      forehand_accuracy: 9,
+      forehand_quick_release: 10,
+      forehand_release_variations: 10,
+      forehand_against_wind: 8,
+      forehand_against_difficult_marks: 10,
+      forehand_tempo_control: 10,
+      specialty_power: 8,
+      specialty_accuracy: 8,
+      specialty_quick_release: 8,
+      specialty_release_variations: 10,
+      specialty_against_wind: 6,
+      specialty_against_difficult_marks: 8,
+      specialty_tempo_control: 8,
+      hucking_confidence: 7,
+      hucking_shape_control: 7,
+      hucking_tempo_control: 7,
+      hucking_placement: 9,
+    },
   },
   // Add more athletes as needed
 ];
@@ -2030,6 +2436,162 @@ File: src\setupTests.js
 // expect(element).toHaveTextContent(/react/i)
 // learn more: https://github.com/testing-library/jest-dom
 import '@testing-library/jest-dom';
+
+
+File: src\utils\constants.js
+================================================================================
+
+// src/utils/constants.js
+
+export const METADATA_KEYS = [
+    'id',
+    'name',
+    'email',
+    'ip',
+    'user_agent',
+    'referrer',
+    'created_at',
+  ];
+  
+
+File: src\utils\helpers.js
+================================================================================
+
+// src/utils/helpers.js
+
+import { METADATA_KEYS } from './constants';
+
+// A small utility to average numeric values for a given list of keys
+export function averageOfKeys(player, keys) {
+  let sum = 0, count = 0;
+  for (const key of keys) {
+    if (typeof player.skills[key] === 'number' && !METADATA_KEYS.includes(key)) {
+      sum += player.skills[key];
+      count++;
+    }
+  }
+  return count === 0 ? 0 : parseFloat((sum / count).toFixed(1));
+}
+
+// Compute category averages for Mental, Physical, Cutting, Throwing, Defense, Handling, Offensive
+export function computeCategoryAverages(player) {
+  // Define keys for each category
+  const categories = {
+    mental: [
+      'mental_game',
+      'feedback_implementation',
+      'injury_prevention',
+      'recovery',
+      'flexibility_mobility',
+    ],
+    physical: [
+      'speed_explosiveness',
+      'endurance',
+      'vertical_leap',
+      'change_of_direction',
+      'boxing_out',
+      'laying_out',
+      'recovery',
+      'flexibility_mobility',
+      'injury_prevention',
+    ],
+    cutting: [
+      'angles',
+      'fakes_footwork',
+      'timing_field_vision',
+      'decisiveness',
+      'catching',
+      'flow_awareness',
+      'isolation_cutting',
+      'continuation_cutting',
+    ],
+    handling: [
+      'handler_movement',
+      'poise_with_disc',
+      'breaking_the_mark',
+      'resetting_from_trap_sideline',
+      'decision_making_vision',
+      'offensive_pattern_recognition',
+      'throw_and_go',
+    ],
+    throwing: [
+      // Backhand
+      'backhand_power',
+      'backhand_accuracy',
+      'backhand_quick_release',
+      'backhand_release_variations',
+      'backhand_against_wind',
+      'backhand_against_difficult_marks',
+      'backhand_tempo_control',
+      // Forehand
+      'forehand_power',
+      'forehand_accuracy',
+      'forehand_quick_release',
+      'forehand_release_variations',
+      'forehand_against_wind',
+      'forehand_against_difficult_marks',
+      'forehand_tempo_control',
+      // Specialty
+      'specialty_power',
+      'specialty_accuracy',
+      'specialty_quick_release',
+      'specialty_release_variations',
+      'specialty_against_wind',
+      'specialty_against_difficult_marks',
+      'specialty_tempo_control',
+      // Hucking
+      'hucking_confidence',
+      'hucking_shape_control',
+      'hucking_tempo_control',
+      'hucking_placement',
+    ],
+    defensive: [
+      'defensive_strategy',
+      'normal_marking',
+      'sideline_trap_marking',
+      'downfield_defending',
+      'handler_defending',
+      'defensive_pattern_recognition',
+      'help_defense',
+      'switching_on_defense',
+      'zone_defense',
+      'defensive_mental_fortitude',
+    ],
+  };
+
+  // Compute individual averages
+  const mental = averageOfKeys(player, categories.mental);
+  const physical = averageOfKeys(player, categories.physical);
+  const cutting = averageOfKeys(player, categories.cutting);
+  const handling = averageOfKeys(player, categories.handling);
+  const throwing = averageOfKeys(player, categories.throwing);
+  const defensive = averageOfKeys(player, categories.defensive);
+
+  // Offensive is the average of cutting, handling, and throwing
+  const offensive = parseFloat(((cutting + handling + throwing) / 3).toFixed(1));
+
+  return {
+    mental,
+    physical,
+    cutting,
+    handling,
+    throwing,
+    defensive,
+    offensive,
+  };
+}
+
+// Compute overall score excluding metadata
+export function computeOverallScore(player) {
+  let sum = 0, count = 0;
+  for (const key in player.skills) {
+    if (typeof player.skills[key] === 'number' && !METADATA_KEYS.includes(key)) {
+      sum += player.skills[key];
+      count++;
+    }
+  }
+  return count === 0 ? 0 : parseFloat((sum / count).toFixed(1));
+}
 
 
 File: src\utils\slugify.js
@@ -2121,148 +2683,23 @@ File: src\App.jsx
 // src/App.jsx
 
 import React, { useState, useEffect } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom'; // Import both hooks
+import { useLocation, useNavigate } from 'react-router-dom';
 import mockData from './data/mockData';
-
-// Import your existing components
 import ProfileHeader from './components/ProfileHeader';
 import SwipeableInsights from './components/SwipeableInsights';
 import CategorySection from './components/CategorySection';
 import RadarChart from './components/RadarChart';
 import OffensiveSection from './components/OffensiveSection';
 import RadialTabs from './components/RadialTabs';
+import { computeCategoryAverages, computeOverallScore } from './utils/helpers';
 
 import './index.css';
-
-/* -------------------------------------
-   1) HELPER FUNCTIONS
--------------------------------------- */
-
-// A small utility to average numeric values for a given list of keys
-function averageOfKeys(player, keys) {
-  let sum = 0, count = 0;
-  for (const key of keys) {
-    if (typeof player[key] === 'number') {
-      sum += player[key];
-      count++;
-    }
-  }
-  return count === 0 ? 0 : parseFloat((sum / count).toFixed(1));
-}
-
-// Compute category averages for Mental, Physical, Cutting, Throwing, Defense, Handling, Offensive
-function computeCategoryAverages(player) {
-  // Define keys for each category
-  const categories = {
-    mental: [
-      'mental_game',
-      'feedback_implementation',
-      'injury_prevention',
-      'recovery',
-      'flexibility_mobility',
-    ],
-    physical: [
-      'speed_explosiveness',
-      'endurance',
-      'vertical_leap',
-      'change_of_direction',
-      'boxing_out',
-      'laying_out',
-      'recovery',
-      'flexibility_mobility',
-      'injury_prevention',
-    ],
-    cutting: [
-      'angles',
-      'fakes_footwork',
-      'timing_field_vision',
-      'decisiveness',
-      'catching',
-      'flow_awareness',
-      'isolation_cutting',
-      'continuation_cutting',
-    ],
-    handling: [
-      'handler_movement',
-      'poise_with_disc',
-      'breaking_the_mark',
-      'resetting_from_trap_sideline',
-      'decision_making_vision',
-      'offensive_pattern_recognition',
-      'throw_and_go',
-    ],
-    throwing: [
-      // Backhand
-      'backhand_power',
-      'backhand_accuracy',
-      'backhand_quick_release',
-      'backhand_release_variations',
-      'backhand_against_wind',
-      'backhand_against_difficult_marks',
-      'backhand_tempo_control',
-      // Forehand
-      'forehand_power',
-      'forehand_accuracy',
-      'forehand_quick_release',
-      'forehand_release_variations',
-      'forehand_against_wind',
-      'forehand_against_difficult_marks',
-      'forehand_tempo_control',
-      // Specialty
-      'specialty_power',
-      'specialty_accuracy',
-      'specialty_quick_release',
-      'specialty_release_variations',
-      'specialty_against_wind',
-      'specialty_against_difficult_marks',
-      'specialty_tempo_control',
-      // Hucking
-      'hucking_confidence',
-      'hucking_shape_control',
-      'hucking_tempo_control',
-      'hucking_placement',
-    ],
-    defensive: [
-      'defensive_strategy',
-      'normal_marking',
-      'sideline_trap_marking',
-      'downfield_defending',
-      'handler_defending',
-      'defensive_pattern_recognition',
-      'help_defense',
-      'switching_on_defense',
-      'zone_defense',
-      'defensive_mental_fortitude',
-    ],
-  };
-
-  // Compute individual averages
-  const mental = averageOfKeys(player, categories.mental);
-  const physical = averageOfKeys(player, categories.physical);
-  const cutting = averageOfKeys(player, categories.cutting);
-  const handling = averageOfKeys(player, categories.handling);
-  const throwing = averageOfKeys(player, categories.throwing);
-  const defensive = averageOfKeys(player, categories.defensive);
-
-  // Offensive is the average of cutting, handling, and throwing
-  const offensive = parseFloat(((cutting + handling + throwing) / 3).toFixed(1));
-
-  return {
-    mental,
-    physical,
-    cutting,
-    handling,
-    throwing,
-    defensive,
-    offensive,
-  };
-}
 
 /* -------------------------------------
    2) HOME SECTION (DASHBOARD)
 -------------------------------------- */
 
-function HomeSection({ player }) {
+function HomeSection({ player }) { // player is the full athlete object
   const [averages, setAverages] = useState({
     mental: 0,
     physical: 0,
@@ -2274,7 +2711,7 @@ function HomeSection({ player }) {
   });
 
   useEffect(() => {
-    const avg = computeCategoryAverages(player);
+    const avg = computeCategoryAverages(player); // Accesses player.skills
     setAverages(avg);
   }, [player]);
 
@@ -2292,7 +2729,7 @@ function HomeSection({ player }) {
   return (
     <div className="mx-auto space-y-4">
       {/* Key Insights (Top 3 strengths, etc.) */}
-      <SwipeableInsights player={player} />
+      <SwipeableInsights player={player.skills} />
 
       {/* Radar Chart for 6 main categories */}
       <div className="bg-gray-800 p-5 rounded-lg shadow-md">
@@ -2315,8 +2752,8 @@ function HomeSection({ player }) {
 -------------------------------------- */
 
 function App() {
-  const location = useLocation();  // Hook to access the URL
-  const navigate = useNavigate();  // Hook to navigate programmatically
+  const location = useLocation();
+  const navigate = useNavigate();
 
   // 3.1) Manage Selected Athlete
   const [selectedAthleteId, setSelectedAthleteId] = useState(mockData[0].id);
@@ -2341,18 +2778,6 @@ function App() {
 
   // Find the selected athlete from mockData
   const selectedAthlete = mockData.find(athlete => athlete.id === selectedAthleteId);
-
-  // 3.3) Compute overall score (0-10) for user
-  const computeOverallScore = (p) => {
-    let sum = 0, count = 0;
-    for (const key in p) {
-      if (typeof p[key] === 'number') {
-        sum += p[key];
-        count++;
-      }
-    }
-    return count === 0 ? 0 : parseFloat((sum / count).toFixed(1));
-  };
 
   // 3.4) Group data into categories
   const getCategoryData = (p) => ({
@@ -2466,12 +2891,12 @@ function App() {
     'Specialty Accuracy',
   ];
   const radarDataValues = [
-    selectedAthlete.backhand_power,
-    selectedAthlete.forehand_power,
-    selectedAthlete.specialty_power,
-    selectedAthlete.backhand_accuracy,
-    selectedAthlete.forehand_accuracy,
-    selectedAthlete.specialty_accuracy,
+    selectedAthlete.skills.backhand_power,
+    selectedAthlete.skills.forehand_power,
+    selectedAthlete.skills.specialty_power,
+    selectedAthlete.skills.backhand_accuracy,
+    selectedAthlete.skills.forehand_accuracy,
+    selectedAthlete.skills.specialty_accuracy,
   ];
 
   /* -------------------------------------
@@ -2481,8 +2906,8 @@ function App() {
     <div className="min-h-screen bg-gray-900 text-gray-100 flex flex-col">
       {/** 1) Profile Header at the top */}
       <ProfileHeader
-        name={selectedAthlete.name}
-        email={selectedAthlete.email}
+        name={selectedAthlete.metadata.name}
+        email={selectedAthlete.metadata.email}
         overallScore={
           activeTab === 'home'
             ? computeOverallScore(selectedAthlete)
@@ -2512,7 +2937,7 @@ function App() {
           <CategorySection
             title="Physical Attributes"
             skills={getCategoryData(selectedAthlete).physical}
-            player={selectedAthlete}
+            player={selectedAthlete.skills}
           />
         )}
 
@@ -2521,7 +2946,7 @@ function App() {
           <>
             <OffensiveSection
               offensiveData={getCategoryData(selectedAthlete).offensive}
-              player={selectedAthlete}
+              player={selectedAthlete.skills}
             />
             {/* Example: A Throw Comparison Radar Chart */}
             <div className="mt-6">
@@ -2538,7 +2963,7 @@ function App() {
           <CategorySection
             title="Defensive Skills"
             skills={getCategoryData(selectedAthlete).defensive}
-            player={selectedAthlete}
+            player={selectedAthlete.skills}
           />
         )}
 
@@ -2547,7 +2972,7 @@ function App() {
           <CategorySection
             title="Mental & Recovery"
             skills={getCategoryData(selectedAthlete).mental}
-            player={selectedAthlete}
+            player={selectedAthlete.skills}
           />
         )}
       </div>
@@ -2685,17 +3110,79 @@ const CategorySection = ({ title, skills, player }) => {
 export default CategorySection;
 
 
+File: src\components\HomeSection.jsx
+================================================================================
+
+// src/components/HomeSection.jsx
+
+import React, { useState, useEffect } from 'react';
+import RadarChart from './RadarChart';
+import SwipeableInsights from './SwipeableInsights';
+import { computeCategoryAverages } from '../utils/helpers';
+
+function HomeSection({ player }) { // player is the full athlete object
+  const [averages, setAverages] = useState({
+    mental: 0,
+    physical: 0,
+    cutting: 0,
+    handling: 0,
+    throwing: 0,
+    defensive: 0,
+    offensive: 0,
+  });
+
+  useEffect(() => {
+    const avg = computeCategoryAverages(player); // Now accesses player.skills
+    setAverages(avg);
+  }, [player]);
+
+  // Radar chart data for 6 categories
+  const radarLabels = ['Mental', 'Physical', 'Cutting', 'Handling', 'Throwing', 'Defense'];
+  const radarDataValues = [
+    averages.mental,
+    averages.physical,
+    averages.cutting,
+    averages.handling,
+    averages.throwing,
+    averages.defensive,
+  ];
+
+  return (
+    <div className="mx-auto space-y-4">
+      {/* Key Insights (Top 3 strengths, etc.) */}
+      <SwipeableInsights player={player.skills} />
+
+      {/* Radar Chart for 6 main categories */}
+      <div className="bg-gray-800 p-5 rounded-lg shadow-md">
+        <h2 className="text-lg font-semibold text-gray-100 mb-4 mt-0">
+          Category Averages
+        </h2>
+        {/* Center the RadarChart */}
+        <div className="w-full flex justify-center">
+          <div className="w-80 h-80">
+            <RadarChart labels={radarLabels} dataValues={radarDataValues} />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default HomeSection;
+
+
 File: src\components\InsightsSection.jsx
 ================================================================================
 
 // src/components/InsightsSection.jsx
 
 import React from 'react';
+import { METADATA_KEYS } from '../utils/constants';
 
 const InsightsSection = ({ player }) => {
   // Example logic: find top 3 skills (by numeric value)
   const skillEntries = Object.entries(player).filter(([key, val]) => {
-    return typeof val === 'number';
+    return typeof val === 'number' && !METADATA_KEYS.includes(key);
   });
 
   // Sort descending by value
@@ -2989,7 +3476,7 @@ const ProfileHeader = ({ name, email, overallScore, athletes, selectedAthleteId,
                       onClick={() => {
                         onSelectAthlete(athlete.id);
                         // Update the URL with both id and name
-                        navigate(`/?id=${athlete.id}&name=${encodeURIComponent(athlete.name)}`);
+                        navigate(`/?id=${athlete.id}&name=${encodeURIComponent(athlete.metadata.name)}`);
                         setIsOpen(false);
                       }}
                       className={`w-full text-left px-4 py-2 text-sm ${
@@ -2998,7 +3485,7 @@ const ProfileHeader = ({ name, email, overallScore, athletes, selectedAthleteId,
                           : 'text-gray-300 hover:bg-gray-700 hover:text-white'
                       }`}
                     >
-                      {athlete.name}
+                      {athlete.metadata.name}
                     </button>
                   </li>
                 ))}
@@ -3017,7 +3504,7 @@ export default ProfileHeader;
 File: src\components\RadarChart.jsx
 ================================================================================
 
-/* src/components/RadarChart.jsx */
+// src/components/RadarChart.jsx
 
 import React from 'react';
 import { Radar } from 'react-chartjs-2';
@@ -3369,6 +3856,8 @@ export default SkillCard;
 File: src\components\SwipeableInsights.jsx
 ================================================================================
 
+// src/components/SwipeableInsights.jsx
+
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence, useAnimation } from 'framer-motion';
 
@@ -3398,13 +3887,13 @@ const InsightsCard = ({ title, data, subtitle }) => (
   </div>
 );
 
-const SwipeableInsights = ({ player }) => {
+const SwipeableInsights = ({ player }) => { // player is player.skills
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const controls = useAnimation();
   const [containerWidth, setContainerWidth] = useState(0);
 
-  // Mock growth targets - in a real app, this would come from user data
+  // Define growth targets based on skills
   const growthTargets = [
     ['laying_out', player.laying_out],
     ['endurance', player.endurance],
@@ -3548,6 +4037,7 @@ const SwipeableInsights = ({ player }) => {
 
 export default SwipeableInsights;
 
+
 File: src\components\Tabs.jsx
 ================================================================================
 
@@ -3652,141 +4142,619 @@ File: src\data\mockData.js
 const mockData = [
   {
     id: 1, // Unique identifier for each athlete
-    name: "Jonathan Mast",
-    email: "jon1mast@gmail.com",
-    speed_explosiveness: 4,
-    endurance: 3,
-    vertical_leap: 3,
-    change_of_direction: 5,
-    boxing_out: 7,
-    laying_out: 1,
-    recovery: 6,
-    flexibility_mobility: 7,
-    injury_prevention: 4,
-    defensive_strategy: 7,
-    offensive_strategy: 9,
-    mental_game: 9,
-    feedback_implementation: 10,
-    isolation_cutting: 3,
-    continuation_cutting: 4,
-    angles: 6,
-    fakes_footwork: 5,
-    timing_field_vision: 6,
-    decisiveness: 5,
-    catching: 9,
-    zone_offense: 8,
-    reading_the_disc: 9,
-    normal_marking: 8,
-    sideline_trap_marking: 9,
-    downfield_defending: 4,
-    handler_defending: 6,
-    defensive_pattern_recognition: 6,
-    help_defense: 8,
-    switching_on_defense: 8,
-    zone_defense: 6,
-    defensive_mental_fortitude: 4,
-    handler_movement: 10,
-    poise_with_disc: 10,
-    breaking_the_mark: 9,
-    resetting_from_trap_sideline: 9,
-    decision_making_vision: 8,
-    flow_awareness: 9,
-    throw_and_go: 8,
-    offensive_pattern_recognition: 9,
-    backhand_power: 9,
-    backhand_accuracy: 9,
-    backhand_quick_release: 9,
-    backhand_release_variations: 9,
-    backhand_against_wind: 8,
-    backhand_against_difficult_marks: 9,
-    backhand_tempo_control: 9,
-    forehand_power: 8,
-    forehand_accuracy: 9,
-    forehand_quick_release: 10,
-    forehand_release_variations: 10,
-    forehand_against_wind: 8,
-    forehand_against_difficult_marks: 10,
-    forehand_tempo_control: 10,
-    specialty_power: 8,
-    specialty_accuracy: 8,
-    specialty_quick_release: 8,
-    specialty_release_variations: 10,
-    specialty_against_wind: 6,
-    specialty_against_difficult_marks: 8,
-    specialty_tempo_control: 8,
-    hucking_confidence: 7,
-    hucking_shape_control: 7,
-    hucking_tempo_control: 7,
-    hucking_placement: 9
+    metadata: {
+      name: "Chris Doehring",
+      email: "doehring@umich.edu",
+      ip: "2600:387:15:4510::6",
+      user_agent: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_6_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.6 Mobile/15E148 Safari/604.1",
+      referrer: "https://ultimate-assessment.netlify.app/",
+      created_at: "2025-01-09T14:18:32.150Z",
+    },
+    skills: {
+      speed_explosiveness: 7,
+      endurance: 8,
+      vertical_leap: 3,
+      change_of_direction: 6,
+      boxing_out: 6,
+      laying_out: 6,
+      recovery: 7,
+      flexibility_mobility: 5,
+      injury_prevention: 7,
+      defensive_strategy: 7,
+      offensive_strategy: 8,
+      mental_game: 9,
+      feedback_implementation: 8,
+      isolation_cutting: 6,
+      continuation_cutting: 8,
+      angles: 7,
+      fakes_footwork: 5,
+      timing_field_vision: 7,
+      decisiveness: 7,
+      catching: 9,
+      zone_offense: 7,
+      reading_the_disc: 7,
+      normal_marking: 6,
+      sideline_trap_marking: 7,
+      downfield_defending: 4,
+      handler_defending: 7,
+      defensive_pattern_recognition: 6,
+      help_defense: 6,
+      switching_on_defense: 7,
+      zone_defense: 7,
+      defensive_mental_fortitude: 8,
+      handler_movement: 8,
+      poise_with_disc: 9,
+      breaking_the_mark: 8,
+      resetting_from_trap_sideline: 8,
+      decision_making_vision: 8,
+      flow_awareness: 8,
+      throw_and_go: 7,
+      offensive_pattern_recognition: 8,
+      backhand_power: 8,
+      backhand_accuracy: 7,
+      backhand_quick_release: 7,
+      backhand_release_variations: 7,
+      backhand_against_wind: 8,
+      backhand_against_difficult_marks: 7,
+      backhand_tempo_control: 8,
+      forehand_power: 4,
+      forehand_accuracy: 5,
+      forehand_quick_release: 7,
+      forehand_release_variations: 5,
+      forehand_against_wind: 4,
+      forehand_against_difficult_marks: 9,
+      forehand_tempo_control: 7,
+      specialty_power: 4,
+      specialty_accuracy: 8,
+      specialty_quick_release: 7,
+      specialty_release_variations: 5,
+      specialty_against_wind: 4,
+      specialty_against_difficult_marks: 5,
+      specialty_tempo_control: 6,
+      hucking_confidence: 7,
+      hucking_shape_control: 7,
+      hucking_tempo_control: 8,
+      hucking_placement: 7,
+    },
   },
   {
     id: 2,
-    name: "Emily Clark",
-    email: "emily.clark@example.com",
-    speed_explosiveness: 7,
-    endurance: 8,
-    vertical_leap: 6,
-    change_of_direction: 7,
-    boxing_out: 5,
-    laying_out: 4,
-    recovery: 7,
-    flexibility_mobility: 8,
-    injury_prevention: 6,
-    defensive_strategy: 8,
-    offensive_strategy: 7,
-    mental_game: 8,
-    feedback_implementation: 9,
-    isolation_cutting: 6,
-    continuation_cutting: 7,
-    angles: 7,
-    fakes_footwork: 8,
-    timing_field_vision: 7,
-    decisiveness: 8,
-    catching: 7,
-    zone_offense: 6,
-    reading_the_disc: 8,
-    normal_marking: 7,
-    sideline_trap_marking: 6,
-    downfield_defending: 7,
-    handler_defending: 7,
-    defensive_pattern_recognition: 7,
-    help_defense: 7,
-    switching_on_defense: 7,
-    zone_defense: 7,
-    defensive_mental_fortitude: 7,
-    handler_movement: 8,
-    poise_with_disc: 8,
-    breaking_the_mark: 7,
-    resetting_from_trap_sideline: 7,
-    decision_making_vision: 7,
-    flow_awareness: 7,
-    throw_and_go: 7,
-    offensive_pattern_recognition: 7,
-    backhand_power: 7,
-    backhand_accuracy: 7,
-    backhand_quick_release: 7,
-    backhand_release_variations: 7,
-    backhand_against_wind: 7,
-    backhand_against_difficult_marks: 7,
-    backhand_tempo_control: 7,
-    forehand_power: 7,
-    forehand_accuracy: 7,
-    forehand_quick_release: 7,
-    forehand_release_variations: 7,
-    forehand_against_wind: 7,
-    forehand_against_difficult_marks: 7,
-    forehand_tempo_control: 7,
-    specialty_power: 7,
-    specialty_accuracy: 7,
-    specialty_quick_release: 7,
-    specialty_release_variations: 7,
-    specialty_against_wind: 7,
-    specialty_against_difficult_marks: 7,
-    specialty_tempo_control: 7,
-    hucking_confidence: 7,
-    hucking_shape_control: 7,
-    hucking_tempo_control: 7,
-    hucking_placement: 7
+    metadata: {
+      name: "Rachel Graber",
+      email: "rachelgraber16@gmail.com",
+      ip: "104.36.4.125",
+      user_agent: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_1_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.1.1 Mobile/15E148 Safari/605.1.15 (Ecosia ios@10.5.2.2065)",
+      referrer: "https://ultimate-assessment.netlify.app/",
+      created_at: "2025-01-09T14:13:29.628Z",
+    },
+    skills: {
+      speed_explosiveness: 7,
+      endurance: 7,
+      vertical_leap: 4,
+      change_of_direction: 8,
+      boxing_out: 6,
+      laying_out: 7,
+      recovery: 8,
+      flexibility_mobility: 9,
+      injury_prevention: 8,
+      defensive_strategy: 8,
+      offensive_strategy: 5,
+      mental_game: 7,
+      feedback_implementation: 8,
+      isolation_cutting: 5,
+      continuation_cutting: 7,
+      angles: 6,
+      fakes_footwork: 7,
+      timing_field_vision: 7,
+      decisiveness: 4,
+      catching: 7,
+      zone_offense: 6,
+      reading_the_disc: 6,
+      normal_marking: 7,
+      sideline_trap_marking: 7,
+      downfield_defending: 7,
+      handler_defending: 8,
+      defensive_pattern_recognition: 6,
+      help_defense: 6,
+      switching_on_defense: 6,
+      zone_defense: 8,
+      defensive_mental_fortitude: 4,
+      handler_movement: 6,
+      poise_with_disc: 6,
+      breaking_the_mark: 4,
+      resetting_from_trap_sideline: 6,
+      decision_making_vision: 5,
+      flow_awareness: 5,
+      throw_and_go: 6,
+      offensive_pattern_recognition: 5,
+      backhand_power: 8,
+      backhand_accuracy: 7,
+      backhand_quick_release: 5,
+      backhand_release_variations: 5,
+      backhand_against_wind: 4,
+      backhand_against_difficult_marks: 5,
+      backhand_tempo_control: 5,
+      forehand_power: 7,
+      forehand_accuracy: 7,
+      forehand_quick_release: 5,
+      forehand_release_variations: 6,
+      forehand_against_wind: 3,
+      forehand_against_difficult_marks: 7,
+      forehand_tempo_control: 6,
+      specialty_power: 3,
+      specialty_accuracy: 3,
+      specialty_quick_release: 3,
+      specialty_release_variations: 3,
+      specialty_against_wind: 1,
+      specialty_against_difficult_marks: 3,
+      specialty_tempo_control: 2,
+      hucking_confidence: 7,
+      hucking_shape_control: 7,
+      hucking_tempo_control: 6,
+      hucking_placement: 6,
+    },
+  },
+  {
+    id: 3,
+    metadata: {
+      name: "Charlie Vukovic",
+      email: "cavukovic@gmail.com",
+      ip: "68.109.206.199",
+      user_agent: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_1_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/131.0.6778.154 Mobile/15E148 Safari/604.1",
+      referrer: "https://ultimate-assessment.netlify.app/",
+      created_at: "2025-01-07T22:04:37.985Z",
+    },
+    skills: {
+      speed_explosiveness: 6,
+      endurance: 8,
+      vertical_leap: 7,
+      change_of_direction: 6,
+      boxing_out: 8,
+      laying_out: 4,
+      recovery: 5,
+      flexibility_mobility: 6,
+      injury_prevention: 6,
+      defensive_strategy: 8,
+      offensive_strategy: 6,
+      mental_game: 9,
+      feedback_implementation: 7,
+      isolation_cutting: 6,
+      continuation_cutting: 6,
+      angles: 5,
+      fakes_footwork: 5,
+      timing_field_vision: 4,
+      decisiveness: 5,
+      catching: 7,
+      zone_offense: 6,
+      reading_the_disc: 7,
+      normal_marking: 3,
+      sideline_trap_marking: 5,
+      downfield_defending: 6,
+      handler_defending: 4,
+      defensive_pattern_recognition: 7,
+      help_defense: 8,
+      switching_on_defense: 8,
+      zone_defense: 8,
+      defensive_mental_fortitude: 8,
+      handler_movement: 5,
+      poise_with_disc: 7,
+      breaking_the_mark: 8,
+      resetting_from_trap_sideline: 8,
+      decision_making_vision: 4,
+      flow_awareness: 5,
+      throw_and_go: 5,
+      offensive_pattern_recognition: 5,
+      backhand_power: 9,
+      backhand_accuracy: 7,
+      backhand_quick_release: 6,
+      backhand_release_variations: 6,
+      backhand_against_wind: 8,
+      backhand_against_difficult_marks: 6,
+      backhand_tempo_control: 5,
+      forehand_power: 7,
+      forehand_accuracy: 7,
+      forehand_quick_release: 7,
+      forehand_release_variations: 7,
+      forehand_against_wind: 6,
+      forehand_against_difficult_marks: 7,
+      forehand_tempo_control: 7,
+      specialty_power: 7,
+      specialty_accuracy: 6,
+      specialty_quick_release: 6,
+      specialty_release_variations: 6,
+      specialty_against_wind: 4,
+      specialty_against_difficult_marks: 6,
+      specialty_tempo_control: 4,
+      hucking_confidence: 7,
+      hucking_shape_control: 6,
+      hucking_tempo_control: 6,
+      hucking_placement: 6,
+    },
+  },
+  {
+    id: 4,
+    metadata: {
+      name: "Mark Whitton",
+      email: "whittonm@mail.gvsu.edu",
+      ip: "2601:405:4700:1db0:411b:5a4c:ddba:1afb",
+      user_agent: "Mozilla/5.0 (iPhone; CPU iPhone OS 16_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.2 Mobile/15E148 Safari/604.1",
+      referrer: "https://ultimate-assessment.netlify.app/",
+      created_at: "2025-01-07T02:07:01.581Z",
+    },
+    skills: {
+      speed_explosiveness: 7,
+      endurance: 6,
+      vertical_leap: 7,
+      change_of_direction: 5,
+      boxing_out: 5,
+      laying_out: 7,
+      recovery: 4,
+      flexibility_mobility: 6,
+      injury_prevention: 6,
+      defensive_strategy: 8,
+      offensive_strategy: 7,
+      mental_game: 6,
+      feedback_implementation: 6,
+      isolation_cutting: 5,
+      continuation_cutting: 6,
+      angles: 6,
+      fakes_footwork: 3,
+      timing_field_vision: 7,
+      decisiveness: 3,
+      catching: 9,
+      zone_offense: 5,
+      reading_the_disc: 7,
+      normal_marking: 6,
+      sideline_trap_marking: 8,
+      downfield_defending: 6,
+      handler_defending: 4,
+      defensive_pattern_recognition: 6,
+      help_defense: 7,
+      switching_on_defense: 8,
+      zone_defense: 7,
+      defensive_mental_fortitude: 7,
+      handler_movement: 5,
+      poise_with_disc: 7,
+      breaking_the_mark: 4,
+      resetting_from_trap_sideline: 7,
+      decision_making_vision: 4,
+      flow_awareness: 6,
+      throw_and_go: 5,
+      offensive_pattern_recognition: 5,
+      backhand_power: 8,
+      backhand_accuracy: 7,
+      backhand_quick_release: 5,
+      backhand_release_variations: 6,
+      backhand_against_wind: 9,
+      backhand_against_difficult_marks: 6,
+      backhand_tempo_control: 7,
+      forehand_power: 9,
+      forehand_accuracy: 8,
+      forehand_quick_release: 6,
+      forehand_release_variations: 6,
+      forehand_against_wind: 8,
+      forehand_against_difficult_marks: 7,
+      forehand_tempo_control: 8,
+      specialty_power: 7,
+      specialty_accuracy: 7,
+      specialty_quick_release: 6,
+      specialty_release_variations: 7,
+      specialty_against_wind: 6,
+      specialty_against_difficult_marks: 6,
+      specialty_tempo_control: 6,
+      hucking_confidence: 9,
+      hucking_shape_control: 8,
+      hucking_tempo_control: 8,
+      hucking_placement: 8,
+    },
+  },
+  {
+    id: 5,
+    metadata: {
+      name: "Rachel Mast",
+      email: "rachelgerb520@gmail.com",
+      ip: "50.126.208.197",
+      user_agent: "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36",
+      referrer: "https://ultimate-assessment.netlify.app/",
+      created_at: "2025-01-07T01:55:25.039Z",
+    },
+    skills: {
+      speed_explosiveness: 8,
+      endurance: 8,
+      vertical_leap: 7,
+      change_of_direction: 8,
+      boxing_out: 7,
+      laying_out: 7,
+      recovery: 10,
+      flexibility_mobility: 8,
+      injury_prevention: 9,
+      defensive_strategy: 7,
+      offensive_strategy: 7,
+      mental_game: 9,
+      feedback_implementation: 9,
+      isolation_cutting: 9,
+      continuation_cutting: 9,
+      angles: 9,
+      fakes_footwork: 7,
+      timing_field_vision: 8,
+      decisiveness: 8,
+      catching: 9,
+      zone_offense: 8,
+      reading_the_disc: 8,
+      normal_marking: 8,
+      sideline_trap_marking: 8,
+      downfield_defending: 8,
+      handler_defending: 8,
+      defensive_pattern_recognition: 6,
+      help_defense: 8,
+      switching_on_defense: 8,
+      zone_defense: 7,
+      defensive_mental_fortitude: 7,
+      handler_movement: 7,
+      poise_with_disc: 6,
+      breaking_the_mark: 6,
+      resetting_from_trap_sideline: 7,
+      decision_making_vision: 8,
+      flow_awareness: 8,
+      throw_and_go: 8,
+      offensive_pattern_recognition: 5,
+      backhand_power: 2,
+      backhand_accuracy: 7,
+      backhand_quick_release: 8,
+      backhand_release_variations: 6,
+      backhand_against_wind: 5,
+      backhand_against_difficult_marks: 6,
+      backhand_tempo_control: 6,
+      forehand_power: 2,
+      forehand_accuracy: 6,
+      forehand_quick_release: 5,
+      forehand_release_variations: 5,
+      forehand_against_wind: 1,
+      forehand_against_difficult_marks: 5,
+      forehand_tempo_control: 5,
+      specialty_power: 1,
+      specialty_accuracy: 1,
+      specialty_quick_release: 1,
+      specialty_release_variations: 1,
+      specialty_against_wind: 1,
+      specialty_against_difficult_marks: 1,
+      specialty_tempo_control: 1,
+      hucking_confidence: 2,
+      hucking_shape_control: 2,
+      hucking_tempo_control: 2,
+      hucking_placement: 2,
+    },
+  },
+  {
+    id: 6,
+    metadata: {
+      name: "Charles Vukovic",
+      email: "cavukovic@gmail.com",
+      ip: "68.109.206.199",
+      user_agent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36 Edg/131.0.0.0",
+      referrer: "https://ultimate-assessment.netlify.app/",
+      created_at: "2025-01-06T23:48:01.361Z",
+    },
+    skills: {
+      speed_explosiveness: 7,
+      endurance: 8,
+      vertical_leap: 7,
+      change_of_direction: 6,
+      boxing_out: 8,
+      laying_out: 4,
+      recovery: 5,
+      flexibility_mobility: 7,
+      injury_prevention: 6,
+      defensive_strategy: 8,
+      offensive_strategy: 6,
+      mental_game: 9,
+      feedback_implementation: 8,
+      isolation_cutting: 4,
+      continuation_cutting: 4,
+      angles: 4,
+      fakes_footwork: 6,
+      timing_field_vision: 3,
+      decisiveness: 5,
+      catching: 7,
+      zone_offense: 8,
+      reading_the_disc: 9,
+      normal_marking: 3,
+      sideline_trap_marking: 5,
+      downfield_defending: 6,
+      handler_defending: 4,
+      defensive_pattern_recognition: 7,
+      help_defense: 8,
+      switching_on_defense: 9,
+      zone_defense: 8,
+      defensive_mental_fortitude: 8,
+      handler_movement: 6,
+      poise_with_disc: 7,
+      breaking_the_mark: 7,
+      resetting_from_trap_sideline: 8,
+      decision_making_vision: 4,
+      flow_awareness: 3,
+      throw_and_go: 4,
+      offensive_pattern_recognition: 3,
+      backhand_power: 9,
+      backhand_accuracy: 7,
+      backhand_quick_release: 5,
+      backhand_release_variations: 6,
+      backhand_against_wind: 5,
+      backhand_against_difficult_marks: 5,
+      backhand_tempo_control: 5,
+      forehand_power: 7,
+      forehand_accuracy: 7,
+      forehand_quick_release: 5,
+      forehand_release_variations: 7,
+      forehand_against_wind: 5,
+      forehand_against_difficult_marks: 7,
+      forehand_tempo_control: 7,
+      specialty_power: 6,
+      specialty_accuracy: 6,
+      specialty_quick_release: 6,
+      specialty_release_variations: 5,
+      specialty_against_wind: 4,
+      specialty_against_difficult_marks: 5,
+      specialty_tempo_control: 6,
+      hucking_confidence: 8,
+      hucking_shape_control: 6,
+      hucking_tempo_control: 6,
+      hucking_placement: 6,
+    },
+  },
+  {
+    id: 7,
+    metadata: {
+      name: "Anson Reppermund",
+      email: "reprimand1000@gmail.com",
+      ip: "108.39.240.253",
+      user_agent: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_1_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.1.1 Mobile/15E148 Safari/604.1",
+      referrer: "https://ultimate-assessment.netlify.app/",
+      created_at: "2025-01-06T23:35:25.293Z",
+    },
+    skills: {
+      speed_explosiveness: 9,
+      endurance: 5,
+      vertical_leap: 9,
+      change_of_direction: 4,
+      boxing_out: 7,
+      laying_out: 3,
+      recovery: 7,
+      flexibility_mobility: 4,
+      injury_prevention: 4,
+      defensive_strategy: 9,
+      offensive_strategy: 7,
+      mental_game: 8,
+      feedback_implementation: 6,
+      isolation_cutting: 6,
+      continuation_cutting: 5,
+      angles: 8,
+      fakes_footwork: 4,
+      timing_field_vision: 7,
+      decisiveness: 5,
+      catching: 6,
+      zone_offense: 7,
+      reading_the_disc: 9,
+      normal_marking: 5,
+      sideline_trap_marking: 8,
+      downfield_defending: 10,
+      handler_defending: 3,
+      defensive_pattern_recognition: 10,
+      help_defense: 10,
+      switching_on_defense: 9,
+      zone_defense: 8,
+      defensive_mental_fortitude: 7,
+      handler_movement: 8,
+      poise_with_disc: 6,
+      breaking_the_mark: 4,
+      resetting_from_trap_sideline: 7,
+      decision_making_vision: 7,
+      flow_awareness: 6,
+      throw_and_go: 5,
+      offensive_pattern_recognition: 5,
+      backhand_power: 8,
+      backhand_accuracy: 5,
+      backhand_quick_release: 8,
+      backhand_release_variations: 7,
+      backhand_against_wind: 7,
+      backhand_against_difficult_marks: 3,
+      backhand_tempo_control: 5,
+      forehand_power: 5,
+      forehand_accuracy: 6,
+      forehand_quick_release: 4,
+      forehand_release_variations: 4,
+      forehand_against_wind: 6,
+      forehand_against_difficult_marks: 5,
+      forehand_tempo_control: 5,
+      specialty_power: 6,
+      specialty_accuracy: 5,
+      specialty_quick_release: 5,
+      specialty_release_variations: 7,
+      specialty_against_wind: 3,
+      specialty_against_difficult_marks: 6,
+      specialty_tempo_control: 5,
+      hucking_confidence: 5,
+      hucking_shape_control: 6,
+      hucking_tempo_control: 5,
+      hucking_placement: 6,
+    },
+  },
+  {
+    id: 8,
+    metadata: {
+      name: "Jonathan Mast",
+      email: "jon1mast@gmail.com",
+      ip: "50.126.208.197",
+      user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0",
+      referrer: "https://ultimate-assessment.netlify.app/",
+      created_at: "2025-01-06T23:28:51.361Z",
+    },
+    skills: {
+      speed_explosiveness: 4,
+      endurance: 3,
+      vertical_leap: 3,
+      change_of_direction: 5,
+      boxing_out: 7,
+      laying_out: 1,
+      recovery: 6,
+      flexibility_mobility: 7,
+      injury_prevention: 4,
+      defensive_strategy: 7,
+      offensive_strategy: 9,
+      mental_game: 9,
+      feedback_implementation: 10,
+      isolation_cutting: 3,
+      continuation_cutting: 4,
+      angles: 6,
+      fakes_footwork: 5,
+      timing_field_vision: 6,
+      decisiveness: 5,
+      catching: 9,
+      zone_offense: 8,
+      reading_the_disc: 9,
+      normal_marking: 8,
+      sideline_trap_marking: 9,
+      downfield_defending: 4,
+      handler_defending: 6,
+      defensive_pattern_recognition: 6,
+      help_defense: 8,
+      switching_on_defense: 8,
+      zone_defense: 6,
+      defensive_mental_fortitude: 4,
+      handler_movement: 10,
+      poise_with_disc: 10,
+      breaking_the_mark: 9,
+      resetting_from_trap_sideline: 9,
+      decision_making_vision: 8,
+      flow_awareness: 9,
+      throw_and_go: 8,
+      offensive_pattern_recognition: 9,
+      backhand_power: 9,
+      backhand_accuracy: 9,
+      backhand_quick_release: 9,
+      backhand_release_variations: 9,
+      backhand_against_wind: 8,
+      backhand_against_difficult_marks: 9,
+      backhand_tempo_control: 9,
+      forehand_power: 8,
+      forehand_accuracy: 9,
+      forehand_quick_release: 10,
+      forehand_release_variations: 10,
+      forehand_against_wind: 8,
+      forehand_against_difficult_marks: 10,
+      forehand_tempo_control: 10,
+      specialty_power: 8,
+      specialty_accuracy: 8,
+      specialty_quick_release: 8,
+      specialty_release_variations: 10,
+      specialty_against_wind: 6,
+      specialty_against_difficult_marks: 8,
+      specialty_tempo_control: 8,
+      hucking_confidence: 7,
+      hucking_shape_control: 7,
+      hucking_tempo_control: 7,
+      hucking_placement: 9,
+    },
   },
   // Add more athletes as needed
 ];
@@ -3855,6 +4823,162 @@ File: src\setupTests.js
 // expect(element).toHaveTextContent(/react/i)
 // learn more: https://github.com/testing-library/jest-dom
 import '@testing-library/jest-dom';
+
+
+File: src\utils\constants.js
+================================================================================
+
+// src/utils/constants.js
+
+export const METADATA_KEYS = [
+    'id',
+    'name',
+    'email',
+    'ip',
+    'user_agent',
+    'referrer',
+    'created_at',
+  ];
+  
+
+File: src\utils\helpers.js
+================================================================================
+
+// src/utils/helpers.js
+
+import { METADATA_KEYS } from './constants';
+
+// A small utility to average numeric values for a given list of keys
+export function averageOfKeys(player, keys) {
+  let sum = 0, count = 0;
+  for (const key of keys) {
+    if (typeof player.skills[key] === 'number' && !METADATA_KEYS.includes(key)) {
+      sum += player.skills[key];
+      count++;
+    }
+  }
+  return count === 0 ? 0 : parseFloat((sum / count).toFixed(1));
+}
+
+// Compute category averages for Mental, Physical, Cutting, Throwing, Defense, Handling, Offensive
+export function computeCategoryAverages(player) {
+  // Define keys for each category
+  const categories = {
+    mental: [
+      'mental_game',
+      'feedback_implementation',
+      'injury_prevention',
+      'recovery',
+      'flexibility_mobility',
+    ],
+    physical: [
+      'speed_explosiveness',
+      'endurance',
+      'vertical_leap',
+      'change_of_direction',
+      'boxing_out',
+      'laying_out',
+      'recovery',
+      'flexibility_mobility',
+      'injury_prevention',
+    ],
+    cutting: [
+      'angles',
+      'fakes_footwork',
+      'timing_field_vision',
+      'decisiveness',
+      'catching',
+      'flow_awareness',
+      'isolation_cutting',
+      'continuation_cutting',
+    ],
+    handling: [
+      'handler_movement',
+      'poise_with_disc',
+      'breaking_the_mark',
+      'resetting_from_trap_sideline',
+      'decision_making_vision',
+      'offensive_pattern_recognition',
+      'throw_and_go',
+    ],
+    throwing: [
+      // Backhand
+      'backhand_power',
+      'backhand_accuracy',
+      'backhand_quick_release',
+      'backhand_release_variations',
+      'backhand_against_wind',
+      'backhand_against_difficult_marks',
+      'backhand_tempo_control',
+      // Forehand
+      'forehand_power',
+      'forehand_accuracy',
+      'forehand_quick_release',
+      'forehand_release_variations',
+      'forehand_against_wind',
+      'forehand_against_difficult_marks',
+      'forehand_tempo_control',
+      // Specialty
+      'specialty_power',
+      'specialty_accuracy',
+      'specialty_quick_release',
+      'specialty_release_variations',
+      'specialty_against_wind',
+      'specialty_against_difficult_marks',
+      'specialty_tempo_control',
+      // Hucking
+      'hucking_confidence',
+      'hucking_shape_control',
+      'hucking_tempo_control',
+      'hucking_placement',
+    ],
+    defensive: [
+      'defensive_strategy',
+      'normal_marking',
+      'sideline_trap_marking',
+      'downfield_defending',
+      'handler_defending',
+      'defensive_pattern_recognition',
+      'help_defense',
+      'switching_on_defense',
+      'zone_defense',
+      'defensive_mental_fortitude',
+    ],
+  };
+
+  // Compute individual averages
+  const mental = averageOfKeys(player, categories.mental);
+  const physical = averageOfKeys(player, categories.physical);
+  const cutting = averageOfKeys(player, categories.cutting);
+  const handling = averageOfKeys(player, categories.handling);
+  const throwing = averageOfKeys(player, categories.throwing);
+  const defensive = averageOfKeys(player, categories.defensive);
+
+  // Offensive is the average of cutting, handling, and throwing
+  const offensive = parseFloat(((cutting + handling + throwing) / 3).toFixed(1));
+
+  return {
+    mental,
+    physical,
+    cutting,
+    handling,
+    throwing,
+    defensive,
+    offensive,
+  };
+}
+
+// Compute overall score excluding metadata
+export function computeOverallScore(player) {
+  let sum = 0, count = 0;
+  for (const key in player.skills) {
+    if (typeof player.skills[key] === 'number' && !METADATA_KEYS.includes(key)) {
+      sum += player.skills[key];
+      count++;
+    }
+  }
+  return count === 0 ? 0 : parseFloat((sum / count).toFixed(1));
+}
 
 
 File: src\utils\slugify.js

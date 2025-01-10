@@ -1,4 +1,4 @@
-/* src/components/RadarChart.jsx */
+// src/components/RadarChart.jsx
 
 import React from 'react';
 import { Radar } from 'react-chartjs-2';

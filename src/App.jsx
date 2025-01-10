@@ -1,148 +1,23 @@
 // src/App.jsx
 
 import React, { useState, useEffect } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom'; // Import both hooks
+import { useLocation, useNavigate } from 'react-router-dom';
 import mockData from './data/mockData';
-
-// Import your existing components
 import ProfileHeader from './components/ProfileHeader';
 import SwipeableInsights from './components/SwipeableInsights';
 import CategorySection from './components/CategorySection';
 import RadarChart from './components/RadarChart';
 import OffensiveSection from './components/OffensiveSection';
 import RadialTabs from './components/RadialTabs';
+import { computeCategoryAverages, computeOverallScore } from './utils/helpers';
 
 import './index.css';
-
-/* -------------------------------------
-   1) HELPER FUNCTIONS
--------------------------------------- */
-
-// A small utility to average numeric values for a given list of keys
-function averageOfKeys(player, keys) {
-  let sum = 0, count = 0;
-  for (const key of keys) {
-    if (typeof player[key] === 'number') {
-      sum += player[key];
-      count++;
-    }
-  }
-  return count === 0 ? 0 : parseFloat((sum / count).toFixed(1));
-}
-
-// Compute category averages for Mental, Physical, Cutting, Throwing, Defense, Handling, Offensive
-function computeCategoryAverages(player) {
-  // Define keys for each category
-  const categories = {
-    mental: [
-      'mental_game',
-      'feedback_implementation',
-      'injury_prevention',
-      'recovery',
-      'flexibility_mobility',
-    ],
-    physical: [
-      'speed_explosiveness',
-      'endurance',
-      'vertical_leap',
-      'change_of_direction',
-      'boxing_out',
-      'laying_out',
-      'recovery',
-      'flexibility_mobility',
-      'injury_prevention',
-    ],
-    cutting: [
-      'angles',
-      'fakes_footwork',
-      'timing_field_vision',
-      'decisiveness',
-      'catching',
-      'flow_awareness',
-      'isolation_cutting',
-      'continuation_cutting',
-    ],
-    handling: [
-      'handler_movement',
-      'poise_with_disc',
-      'breaking_the_mark',
-      'resetting_from_trap_sideline',
-      'decision_making_vision',
-      'offensive_pattern_recognition',
-      'throw_and_go',
-    ],
-    throwing: [
-      // Backhand
-      'backhand_power',
-      'backhand_accuracy',
-      'backhand_quick_release',
-      'backhand_release_variations',
-      'backhand_against_wind',
-      'backhand_against_difficult_marks',
-      'backhand_tempo_control',
-      // Forehand
-      'forehand_power',
-      'forehand_accuracy',
-      'forehand_quick_release',
-      'forehand_release_variations',
-      'forehand_against_wind',
-      'forehand_against_difficult_marks',
-      'forehand_tempo_control',
-      // Specialty
-      'specialty_power',
-      'specialty_accuracy',
-      'specialty_quick_release',
-      'specialty_release_variations',
-      'specialty_against_wind',
-      'specialty_against_difficult_marks',
-      'specialty_tempo_control',
-      // Hucking
-      'hucking_confidence',
-      'hucking_shape_control',
-      'hucking_tempo_control',
-      'hucking_placement',
-    ],
-    defensive: [
-      'defensive_strategy',
-      'normal_marking',
-      'sideline_trap_marking',
-      'downfield_defending',
-      'handler_defending',
-      'defensive_pattern_recognition',
-      'help_defense',
-      'switching_on_defense',
-      'zone_defense',
-      'defensive_mental_fortitude',
-    ],
-  };
-
-  // Compute individual averages
-  const mental = averageOfKeys(player, categories.mental);
-  const physical = averageOfKeys(player, categories.physical);
-  const cutting = averageOfKeys(player, categories.cutting);
-  const handling = averageOfKeys(player, categories.handling);
-  const throwing = averageOfKeys(player, categories.throwing);
-  const defensive = averageOfKeys(player, categories.defensive);
-
-  // Offensive is the average of cutting, handling, and throwing
-  const offensive = parseFloat(((cutting + handling + throwing) / 3).toFixed(1));
-
-  return {
-    mental,
-    physical,
-    cutting,
-    handling,
-    throwing,
-    defensive,
-    offensive,
-  };
-}
 
 /* -------------------------------------
    2) HOME SECTION (DASHBOARD)
 -------------------------------------- */
 
-function HomeSection({ player }) {
+function HomeSection({ player }) { // player is the full athlete object
   const [averages, setAverages] = useState({
     mental: 0,
     physical: 0,
@@ -154,7 +29,7 @@ function HomeSection({ player }) {
   });
 
   useEffect(() => {
-    const avg = computeCategoryAverages(player);
+    const avg = computeCategoryAverages(player); // Accesses player.skills
     setAverages(avg);
   }, [player]);
 
@@ -172,7 +47,7 @@ function HomeSection({ player }) {
   return (
     <div className="mx-auto space-y-4">
       {/* Key Insights (Top 3 strengths, etc.) */}
-      <SwipeableInsights player={player} />
+      <SwipeableInsights player={player.skills} />
 
       {/* Radar Chart for 6 main categories */}
       <div className="bg-gray-800 p-5 rounded-lg shadow-md">
@@ -195,8 +70,8 @@ function HomeSection({ player }) {
 -------------------------------------- */
 
 function App() {
-  const location = useLocation();  // Hook to access the URL
-  const navigate = useNavigate();  // Hook to navigate programmatically
+  const location = useLocation();
+  const navigate = useNavigate();
 
   // 3.1) Manage Selected Athlete
   const [selectedAthleteId, setSelectedAthleteId] = useState(mockData[0].id);
@@ -221,18 +96,6 @@ function App() {
 
   // Find the selected athlete from mockData
   const selectedAthlete = mockData.find(athlete => athlete.id === selectedAthleteId);
-
-  // 3.3) Compute overall score (0-10) for user
-  const computeOverallScore = (p) => {
-    let sum = 0, count = 0;
-    for (const key in p) {
-      if (typeof p[key] === 'number') {
-        sum += p[key];
-        count++;
-      }
-    }
-    return count === 0 ? 0 : parseFloat((sum / count).toFixed(1));
-  };
 
   // 3.4) Group data into categories
   const getCategoryData = (p) => ({
@@ -346,12 +209,12 @@ function App() {
     'Specialty Accuracy',
   ];
   const radarDataValues = [
-    selectedAthlete.backhand_power,
-    selectedAthlete.forehand_power,
-    selectedAthlete.specialty_power,
-    selectedAthlete.backhand_accuracy,
-    selectedAthlete.forehand_accuracy,
-    selectedAthlete.specialty_accuracy,
+    selectedAthlete.skills.backhand_power,
+    selectedAthlete.skills.forehand_power,
+    selectedAthlete.skills.specialty_power,
+    selectedAthlete.skills.backhand_accuracy,
+    selectedAthlete.skills.forehand_accuracy,
+    selectedAthlete.skills.specialty_accuracy,
   ];
 
   /* -------------------------------------
@@ -361,8 +224,8 @@ function App() {
     <div className="min-h-screen bg-gray-900 text-gray-100 flex flex-col">
       {/** 1) Profile Header at the top */}
       <ProfileHeader
-        name={selectedAthlete.name}
-        email={selectedAthlete.email}
+        name={selectedAthlete.metadata.name}
+        email={selectedAthlete.metadata.email}
         overallScore={
           activeTab === 'home'
             ? computeOverallScore(selectedAthlete)
@@ -392,7 +255,7 @@ function App() {
           <CategorySection
             title="Physical Attributes"
             skills={getCategoryData(selectedAthlete).physical}
-            player={selectedAthlete}
+            player={selectedAthlete.skills}
           />
         )}
 
@@ -401,7 +264,7 @@ function App() {
           <>
             <OffensiveSection
               offensiveData={getCategoryData(selectedAthlete).offensive}
-              player={selectedAthlete}
+              player={selectedAthlete.skills}
             />
             {/* Example: A Throw Comparison Radar Chart */}
             <div className="mt-6">
@@ -418,7 +281,7 @@ function App() {
           <CategorySection
             title="Defensive Skills"
             skills={getCategoryData(selectedAthlete).defensive}
-            player={selectedAthlete}
+            player={selectedAthlete.skills}
           />
         )}
 
@@ -427,7 +290,7 @@ function App() {
           <CategorySection
             title="Mental & Recovery"
             skills={getCategoryData(selectedAthlete).mental}
-            player={selectedAthlete}
+            player={selectedAthlete.skills}
           />
         )}
       </div>

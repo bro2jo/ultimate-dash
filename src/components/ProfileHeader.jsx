@@ -86,7 +86,7 @@ const ProfileHeader = ({ name, email, overallScore, athletes, selectedAthleteId,
                       onClick={() => {
                         onSelectAthlete(athlete.id);
                         // Update the URL with both id and name
-                        navigate(`/?id=${athlete.id}&name=${encodeURIComponent(athlete.name)}`);
+                        navigate(`/?id=${athlete.id}&name=${encodeURIComponent(athlete.metadata.name)}`);
                         setIsOpen(false);
                       }}
                       className={`w-full text-left px-4 py-2 text-sm ${
@@ -95,7 +95,7 @@ const ProfileHeader = ({ name, email, overallScore, athletes, selectedAthleteId,
                           : 'text-gray-300 hover:bg-gray-700 hover:text-white'
                       }`}
                     >
-                      {athlete.name}
+                      {athlete.metadata.name}
                     </button>
                   </li>
                 ))}

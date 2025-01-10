@@ -1,3 +1,5 @@
+// src/components/SwipeableInsights.jsx
+
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence, useAnimation } from 'framer-motion';
 
@@ -27,13 +29,13 @@ const InsightsCard = ({ title, data, subtitle }) => (
   </div>
 );
 
-const SwipeableInsights = ({ player }) => {
+const SwipeableInsights = ({ player }) => { // player is player.skills
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const controls = useAnimation();
   const [containerWidth, setContainerWidth] = useState(0);
 
-  // Mock growth targets - in a real app, this would come from user data
+  // Define growth targets based on skills
   const growthTargets = [
     ['laying_out', player.laying_out],
     ['endurance', player.endurance],
