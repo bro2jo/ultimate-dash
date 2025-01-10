@@ -1,6 +1,6 @@
 Project: performance-app
 Version: 0.1.0
-Generated: 2025-01-10T16:50:36.955Z
+Generated: 2025-01-10T21:52:03.736Z
 ================================================================================
 
 File: concat-files.js
@@ -125,7 +125,9 @@ File: package.json
     "react-chartjs-2": "^5.3.0",
     "react-dom": "^19.0.0",
     "react-icons": "^5.4.0",
-    "react-scripts": "5.0.1"
+    "react-router-dom": "^7.1.1",
+    "react-scripts": "5.0.1",
+    "slugify": "^1.6.6"
   },
   "scripts": {
     "start": "react-scripts start",
@@ -288,446 +290,21 @@ File: src\App.css
 }
 
 
-File: src\App.js
-================================================================================
-
-// src/App.jsx
-
-import React, { useState, useEffect } from 'react';
-import mockData from './data/mockData';
-
-// 1) Import your existing components
-import ProfileHeader from './components/ProfileHeader';
-import InsightsSection from './components/InsightsSection';
-import CategorySection from './components/CategorySection';
-import RadarChart from './components/RadarChart';
-import OffensiveSection from './components/OffensiveSection';
-
-// 2) Import the updated RadialTabs component
-import RadialTabs from './components/RadialTabs';
-
-import './index.css';
-
-/* -------------------------------------
-   1) HELPER FUNCTIONS
--------------------------------------- */
-
-// A small utility to average numeric values for a given list of keys
-function averageOfKeys(player, keys) {
-  let sum = 0, count = 0;
-  for (const key of keys) {
-    if (typeof player[key] === 'number') {
-      sum += player[key];
-      count++;
-    }
-  }
-  return count === 0 ? 0 : parseFloat((sum / count).toFixed(1));
-}
-
-// Compute category averages for Mental, Physical, Cutting, Throwing, Defense, Handling, Offensive
-function computeCategoryAverages(player) {
-  // 1) MENTAL
-  const mentalKeys = [
-    'mental_game',
-    'feedback_implementation',
-    'injury_prevention',
-    'recovery',
-    'flexibility_mobility',
-  ];
-
-  // 2) PHYSICAL
-  const physicalKeys = [
-    'speed_explosiveness',
-    'endurance',
-    'vertical_leap',
-    'change_of_direction',
-    'boxing_out',
-    'laying_out',
-    'recovery',
-    'flexibility_mobility',
-    'injury_prevention',
-  ];
-
-  // 3) CUTTING
-  const cuttingKeys = [
-    'angles',
-    'fakes_footwork',
-    'timing_field_vision',
-    'decisiveness',
-    'catching',
-    'flow_awareness',
-    'isolation_cutting',
-    'continuation_cutting',
-  ];
-
-  // 4) HANDLING
-  const handlingKeys = [
-    'handler_movement',
-    'poise_with_disc',
-    'breaking_the_mark',
-    'resetting_from_trap_sideline',
-    'decision_making_vision',
-    'offensive_pattern_recognition',
-    'throw_and_go',
-  ];
-
-  // 5) THROWING (Backhand, Forehand, Specialty, Hucking)
-  const throwingKeys = [
-    // Backhand
-    'backhand_power',
-    'backhand_accuracy',
-    'backhand_quick_release',
-    'backhand_release_variations',
-    'backhand_against_wind',
-    'backhand_against_difficult_marks',
-    'backhand_tempo_control',
-    // Forehand
-    'forehand_power',
-    'forehand_accuracy',
-    'forehand_quick_release',
-    'forehand_release_variations',
-    'forehand_against_wind',
-    'forehand_against_difficult_marks',
-    'forehand_tempo_control',
-    // Specialty
-    'specialty_power',
-    'specialty_accuracy',
-    'specialty_quick_release',
-    'specialty_release_variations',
-    'specialty_against_wind',
-    'specialty_against_difficult_marks',
-    'specialty_tempo_control',
-    // Hucking
-    'hucking_confidence',
-    'hucking_shape_control',
-    'hucking_tempo_control',
-    'hucking_placement',
-  ];
-
-  // 6) DEFENSE
-  const defenseKeys = [
-    'defensive_strategy',
-    'normal_marking',
-    'sideline_trap_marking',
-    'downfield_defending',
-    'handler_defending',
-    'defensive_pattern_recognition',
-    'help_defense',
-    'switching_on_defense',
-    'zone_defense',
-    'defensive_mental_fortitude',
-  ];
-
-  // Compute individual averages
-  const mental = averageOfKeys(player, mentalKeys);
-  const physical = averageOfKeys(player, physicalKeys);
-  const cutting = averageOfKeys(player, cuttingKeys);
-  const handling = averageOfKeys(player, handlingKeys);
-  const throwing = averageOfKeys(player, throwingKeys);
-  const defensive = averageOfKeys(player, defenseKeys);
-
-  // 7) OFFENSIVE
-  // Offensive is computed as the average of cutting, handling, throwing
-  const offensive = parseFloat(((cutting + handling + throwing) / 3).toFixed(1));
-
-  return {
-    mental,
-    physical,
-    cutting,
-    handling,
-    throwing,
-    defensive,
-    offensive, // Ensure this key matches RadialTabs expectation
-  };
-}
-
-/* -------------------------------------
-   2) HOME SECTION (DASHBOARD)
--------------------------------------- */
-
-function HomeSection({ player }) {
-  const [averages, setAverages] = useState({
-    mental: 0,
-    physical: 0,
-    cutting: 0,
-    handling: 0,
-    throwing: 0,
-    defensive: 0,
-    offensive: 0, // Added offensive to maintain consistency
-  });
-
-  useEffect(() => {
-    const avg = computeCategoryAverages(player);
-    setAverages(avg);
-  }, [player]);
-
-  // Radar chart data for 6 categories
-  const radarLabels = ['Mental', 'Physical', 'Cutting', 'Handling', 'Throwing', 'Defense'];
-  const radarDataValues = [
-    averages.mental,
-    averages.physical,
-    averages.cutting,
-    averages.handling,
-    averages.throwing,
-    averages.defensive,
-  ];
-
-  return (
-    <div className="space-y-6">
-      {/* Key Insights (Top 3 strengths, etc.) */}
-      <InsightsSection player={player} />
-
-      {/* Radar Chart for 6 main categories */}
-      <div className="bg-gray-800 p-4 rounded-lg shadow-md">
-        <h2 className="text-lg font-semibold text-gray-100 mb-3">
-          Category Averages
-        </h2>
-        <div className="w-full h-64">
-          <RadarChart labels={radarLabels} dataValues={radarDataValues} />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* -------------------------------------
-   3) MAIN APP
--------------------------------------- */
-
-function App() {
-  // Grab first player from mock data
-  const player = mockData[0];
-
-  // 3.1) Compute overall score (0-10) for user
-  const computeOverallScore = (p) => {
-    let sum = 0, count = 0;
-    for (const key in p) {
-      if (typeof p[key] === 'number') {
-        sum += p[key];
-        count++;
-      }
-    }
-    return count === 0 ? 0 : parseFloat((sum / count).toFixed(1));
-  };
-
-  // 3.2) Group data into categories (unchanged from your code)
-  const getCategoryData = (p) => ({
-    physical: [
-      { key: 'speed_explosiveness', label: 'Speed & Explosiveness' },
-      { key: 'endurance', label: 'Endurance' },
-      { key: 'vertical_leap', label: 'Vertical Leap' },
-      { key: 'change_of_direction', label: 'Change of Direction' },
-      { key: 'boxing_out', label: 'Boxing Out' },
-      { key: 'laying_out', label: 'Laying Out' },
-      { key: 'recovery', label: 'Recovery' },
-      { key: 'flexibility_mobility', label: 'Flexibility & Mobility' },
-      { key: 'injury_prevention', label: 'Injury Prevention' },
-    ],
-    offensive: {
-      cutting: [
-        { key: 'angles', label: 'Angles' },
-        { key: 'fakes_footwork', label: 'Fakes & Footwork' },
-        { key: 'timing_field_vision', label: 'Timing & Field Vision' },
-        { key: 'decisiveness', label: 'Decisiveness' },
-        { key: 'catching', label: 'Catching' },
-        { key: 'flow_awareness', label: 'Flow Awareness' },
-        { key: 'isolation_cutting', label: 'Isolation Cutting' },
-        { key: 'continuation_cutting', label: 'Continuation Cutting' },
-      ],
-      handling: [
-        { key: 'handler_movement', label: 'Handler Movement' },
-        { key: 'poise_with_disc', label: 'Poise w/ Disc' },
-        { key: 'breaking_the_mark', label: 'Breaking the Mark' },
-        { key: 'resetting_from_trap_sideline', label: 'Reset from Trap' },
-        { key: 'decision_making_vision', label: 'Decision Making & Vision' },
-        { key: 'offensive_pattern_recognition', label: 'Pattern Recognition' },
-        { key: 'throw_and_go', label: 'Throw & Go' },
-      ],
-      throwing: {
-        backhand: [
-          { key: 'backhand_power', label: 'Backhand Power' },
-          { key: 'backhand_accuracy', label: 'Backhand Accuracy' },
-          { key: 'backhand_quick_release', label: 'Backhand Quick Release' },
-          { key: 'backhand_release_variations', label: 'Backhand Variations' },
-          { key: 'backhand_against_wind', label: 'Backhand vs Wind' },
-          { key: 'backhand_against_difficult_marks', label: 'Backhand vs Difficult Marks' },
-          { key: 'backhand_tempo_control', label: 'Backhand Tempo Control' },
-        ],
-        forehand: [
-          { key: 'forehand_power', label: 'Forehand Power' },
-          { key: 'forehand_accuracy', label: 'Forehand Accuracy' },
-          { key: 'forehand_quick_release', label: 'Forehand Quick Release' },
-          { key: 'forehand_release_variations', label: 'Forehand Variations' },
-          { key: 'forehand_against_wind', label: 'Forehand vs Wind' },
-          { key: 'forehand_against_difficult_marks', label: 'Forehand vs Difficult Marks' },
-          { key: 'forehand_tempo_control', label: 'Forehand Tempo Control' },
-        ],
-        specialty: [
-          { key: 'specialty_power', label: 'Specialty Power' },
-          { key: 'specialty_accuracy', label: 'Specialty Accuracy' },
-          { key: 'specialty_quick_release', label: 'Specialty Quick Release' },
-          { key: 'specialty_release_variations', label: 'Specialty Variations' },
-          { key: 'specialty_against_wind', label: 'Specialty vs Wind' },
-          { key: 'specialty_against_difficult_marks', label: 'Specialty vs Difficult Marks' },
-          { key: 'specialty_tempo_control', label: 'Specialty Tempo Control' },
-        ],
-        hucking: [
-          { key: 'hucking_confidence', label: 'Hucking Confidence' },
-          { key: 'hucking_shape_control', label: 'Hucking Shape Control' },
-          { key: 'hucking_tempo_control', label: 'Hucking Tempo Control' },
-          { key: 'hucking_placement', label: 'Hucking Placement' },
-        ],
-      },
-    },
-    defensive: [
-      { key: 'defensive_strategy', label: 'Defensive Strategy' },
-      { key: 'normal_marking', label: 'Normal Marking' },
-      { key: 'sideline_trap_marking', label: 'Sideline Trap Marking' },
-      { key: 'downfield_defending', label: 'Downfield Defending' },
-      { key: 'handler_defending', label: 'Handler Defending' },
-      { key: 'defensive_pattern_recognition', label: 'Pattern Recognition' },
-      { key: 'help_defense', label: 'Help Defense' },
-      { key: 'switching_on_defense', label: 'Switching on Defense' },
-      { key: 'zone_defense', label: 'Zone Defense' },
-      { key: 'defensive_mental_fortitude', label: 'Defensive Mental Fortitude' },
-    ],
-    mental: [
-      { key: 'mental_game', label: 'Mental Game' },
-      { key: 'feedback_implementation', label: 'Feedback Implementation' },
-      { key: 'injury_prevention', label: 'Injury Prevention' },
-      { key: 'recovery', label: 'Recovery' },
-      { key: 'flexibility_mobility', label: 'Flexibility & Mobility' },
-    ],
-  });
-
-  // 3.3) We fetch the categories
-  const categories = getCategoryData(player);
-
-  // 3.4) We'll keep track of the active tab, default to "home"
-  const [activeTab, setActiveTab] = useState('home');
-
-  // 3.5) Precompute the main category averages for radial tab display
-  const [averages, setAverages] = useState({});
-  useEffect(() => {
-    const newAvg = computeCategoryAverages(player);
-    setAverages(newAvg);
-  }, [player]);
-
-  // 3.6) Radar example for “Throw Comparison” inside Offensive
-  const radarLabels = [
-    'Backhand Power',
-    'Forehand Power',
-    'Specialty Power',
-    'Backhand Accuracy',
-    'Forehand Accuracy',
-    'Specialty Accuracy',
-  ];
-  const radarDataValues = [
-    player.backhand_power,
-    player.forehand_power,
-    player.specialty_power,
-    player.backhand_accuracy,
-    player.forehand_accuracy,
-    player.specialty_accuracy,
-  ];
-
-  /* -------------------------------------
-     RENDER
-  -------------------------------------- */
-  return (
-    <div className="min-h-screen bg-gray-900 text-gray-100 flex flex-col">
-      {/** 1) Profile Header at the top */}
-      <ProfileHeader
-        name={player.name}
-        email={player.email}
-        overallScore={
-          activeTab === 'home'
-            ? computeOverallScore(player)
-            : averages[activeTab] || 0
-        }
-      />
-
-      {/** 2) The radial nav row (icons + radial) for Home, Physical, Offensive, Defensive, Mental */}
-      <RadialTabs
-        activeTab={activeTab}
-        onChangeTab={setActiveTab}
-        averages={averages}
-      />
-
-      {/** 3) Scrollable content below the radial nav */}
-      <div className="flex-1 overflow-auto px-4 pb-8 mt-4">
-        {/** HOME (Dashboard) */}
-        {activeTab === 'home' && (
-          <HomeSection player={player} />
-        )}
-
-        {/** PHYSICAL */}
-        {activeTab === 'physical' && (
-          <CategorySection
-            title="Physical Attributes"
-            skills={categories.physical}
-            player={player}
-          />
-        )}
-
-        {/** OFFENSIVE */}
-        {activeTab === 'offensive' && (
-          <>
-            <OffensiveSection
-              offensiveData={categories.offensive}
-              player={player}
-            />
-            {/* Example: A Throw Comparison Radar Chart */}
-            <div className="mt-6">
-              <h2 className="text-xl font-semibold mb-2 text-gray-100">
-                Throw Comparison
-              </h2>
-              <RadarChart labels={radarLabels} dataValues={radarDataValues} />
-            </div>
-          </>
-        )}
-
-        {/** DEFENSIVE */}
-        {activeTab === 'defensive' && (
-          <CategorySection
-            title="Defensive Skills"
-            skills={categories.defensive}
-            player={player}
-          />
-        )}
-
-        {/** MENTAL */}
-        {activeTab === 'mental' && (
-          <CategorySection
-            title="Mental & Recovery"
-            skills={categories.mental}
-            player={player}
-          />
-        )}
-      </div>
-    </div>
-  );
-}
-
-export default App;
-
-
 File: src\App.jsx
 ================================================================================
 
 // src/App.jsx
 
 import React, { useState, useEffect } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom'; // Import both hooks
 import mockData from './data/mockData';
 
-// 1) Import your existing components
+// Import your existing components
 import ProfileHeader from './components/ProfileHeader';
-import InsightsSection from './components/InsightsSection';
+import SwipeableInsights from './components/SwipeableInsights';
 import CategorySection from './components/CategorySection';
 import RadarChart from './components/RadarChart';
 import OffensiveSection from './components/OffensiveSection';
-
-// 2) Import the updated RadialTabs component
 import RadialTabs from './components/RadialTabs';
 
 import './index.css';
@@ -750,108 +327,99 @@ function averageOfKeys(player, keys) {
 
 // Compute category averages for Mental, Physical, Cutting, Throwing, Defense, Handling, Offensive
 function computeCategoryAverages(player) {
-  // 1) MENTAL
-  const mentalKeys = [
-    'mental_game',
-    'feedback_implementation',
-    'injury_prevention',
-    'recovery',
-    'flexibility_mobility',
-  ];
-
-  // 2) PHYSICAL
-  const physicalKeys = [
-    'speed_explosiveness',
-    'endurance',
-    'vertical_leap',
-    'change_of_direction',
-    'boxing_out',
-    'laying_out',
-    'recovery',
-    'flexibility_mobility',
-    'injury_prevention',
-  ];
-
-  // 3) CUTTING
-  const cuttingKeys = [
-    'angles',
-    'fakes_footwork',
-    'timing_field_vision',
-    'decisiveness',
-    'catching',
-    'flow_awareness',
-    'isolation_cutting',
-    'continuation_cutting',
-  ];
-
-  // 4) HANDLING
-  const handlingKeys = [
-    'handler_movement',
-    'poise_with_disc',
-    'breaking_the_mark',
-    'resetting_from_trap_sideline',
-    'decision_making_vision',
-    'offensive_pattern_recognition',
-    'throw_and_go',
-  ];
-
-  // 5) THROWING (Backhand, Forehand, Specialty, Hucking)
-  const throwingKeys = [
-    // Backhand
-    'backhand_power',
-    'backhand_accuracy',
-    'backhand_quick_release',
-    'backhand_release_variations',
-    'backhand_against_wind',
-    'backhand_against_difficult_marks',
-    'backhand_tempo_control',
-    // Forehand
-    'forehand_power',
-    'forehand_accuracy',
-    'forehand_quick_release',
-    'forehand_release_variations',
-    'forehand_against_wind',
-    'forehand_against_difficult_marks',
-    'forehand_tempo_control',
-    // Specialty
-    'specialty_power',
-    'specialty_accuracy',
-    'specialty_quick_release',
-    'specialty_release_variations',
-    'specialty_against_wind',
-    'specialty_against_difficult_marks',
-    'specialty_tempo_control',
-    // Hucking
-    'hucking_confidence',
-    'hucking_shape_control',
-    'hucking_tempo_control',
-    'hucking_placement',
-  ];
-
-  // 6) DEFENSE
-  const defenseKeys = [
-    'defensive_strategy',
-    'normal_marking',
-    'sideline_trap_marking',
-    'downfield_defending',
-    'handler_defending',
-    'defensive_pattern_recognition',
-    'help_defense',
-    'switching_on_defense',
-    'zone_defense',
-    'defensive_mental_fortitude',
-  ];
+  // Define keys for each category
+  const categories = {
+    mental: [
+      'mental_game',
+      'feedback_implementation',
+      'injury_prevention',
+      'recovery',
+      'flexibility_mobility',
+    ],
+    physical: [
+      'speed_explosiveness',
+      'endurance',
+      'vertical_leap',
+      'change_of_direction',
+      'boxing_out',
+      'laying_out',
+      'recovery',
+      'flexibility_mobility',
+      'injury_prevention',
+    ],
+    cutting: [
+      'angles',
+      'fakes_footwork',
+      'timing_field_vision',
+      'decisiveness',
+      'catching',
+      'flow_awareness',
+      'isolation_cutting',
+      'continuation_cutting',
+    ],
+    handling: [
+      'handler_movement',
+      'poise_with_disc',
+      'breaking_the_mark',
+      'resetting_from_trap_sideline',
+      'decision_making_vision',
+      'offensive_pattern_recognition',
+      'throw_and_go',
+    ],
+    throwing: [
+      // Backhand
+      'backhand_power',
+      'backhand_accuracy',
+      'backhand_quick_release',
+      'backhand_release_variations',
+      'backhand_against_wind',
+      'backhand_against_difficult_marks',
+      'backhand_tempo_control',
+      // Forehand
+      'forehand_power',
+      'forehand_accuracy',
+      'forehand_quick_release',
+      'forehand_release_variations',
+      'forehand_against_wind',
+      'forehand_against_difficult_marks',
+      'forehand_tempo_control',
+      // Specialty
+      'specialty_power',
+      'specialty_accuracy',
+      'specialty_quick_release',
+      'specialty_release_variations',
+      'specialty_against_wind',
+      'specialty_against_difficult_marks',
+      'specialty_tempo_control',
+      // Hucking
+      'hucking_confidence',
+      'hucking_shape_control',
+      'hucking_tempo_control',
+      'hucking_placement',
+    ],
+    defensive: [
+      'defensive_strategy',
+      'normal_marking',
+      'sideline_trap_marking',
+      'downfield_defending',
+      'handler_defending',
+      'defensive_pattern_recognition',
+      'help_defense',
+      'switching_on_defense',
+      'zone_defense',
+      'defensive_mental_fortitude',
+    ],
+  };
 
   // Compute individual averages
-  const mental = averageOfKeys(player, mentalKeys);
-  const physical = averageOfKeys(player, physicalKeys);
-  const cutting = averageOfKeys(player, cuttingKeys);
-  const handling = averageOfKeys(player, handlingKeys);
-  const throwing = averageOfKeys(player, throwingKeys);
-  const defensive = averageOfKeys(player, defenseKeys);
+  const mental = averageOfKeys(player, categories.mental);
+  const physical = averageOfKeys(player, categories.physical);
+  const cutting = averageOfKeys(player, categories.cutting);
+  const handling = averageOfKeys(player, categories.handling);
+  const throwing = averageOfKeys(player, categories.throwing);
+  const defensive = averageOfKeys(player, categories.defensive);
 
-  // 7) OFFENSIVE
-  // Offensive is computed as the average of cutting, handling, throwing
+  // Offensive is the average of cutting, handling, and throwing
   const offensive = parseFloat(((cutting + handling + throwing) / 3).toFixed(1));
 
   return {
@@ -861,7 +429,7 @@ function computeCategoryAverages(player) {
     handling,
     throwing,
     defensive,
-    offensive, // Ensure this key matches RadialTabs expectation
+    offensive,
   };
 }
 
@@ -877,7 +445,7 @@ function HomeSection({ player }) {
     handling: 0,
     throwing: 0,
     defensive: 0,
-    offensive: 0, // Added offensive to maintain consistency
+    offensive: 0,
   });
 
   useEffect(() => {
@@ -897,17 +465,20 @@ function HomeSection({ player }) {
   ];
 
   return (
-    <div className="space-y-6">
+    <div className="mx-auto space-y-4">
       {/* Key Insights (Top 3 strengths, etc.) */}
-      <InsightsSection player={player} />
+      <SwipeableInsights player={player} />
 
       {/* Radar Chart for 6 main categories */}
-      <div className="bg-gray-800 p-4 rounded-lg shadow-md">
-        <h2 className="text-lg font-semibold text-gray-100 mb-3">
+      <div className="bg-gray-800 p-5 rounded-lg shadow-md">
+        <h2 className="text-lg font-semibold text-gray-100 mb-4 mt-0">
           Category Averages
         </h2>
-        <div className="w-full h-64">
-          <RadarChart labels={radarLabels} dataValues={radarDataValues} />
+        {/* Center the RadarChart */}
+        <div className="w-full flex justify-center">
+          <div className="w-80 h-80">
+            <RadarChart labels={radarLabels} dataValues={radarDataValues} />
+          </div>
         </div>
       </div>
     </div>
@@ -919,10 +490,34 @@ function HomeSection({ player }) {
 -------------------------------------- */
 
 function App() {
-  // Grab first player from mock data
-  const player = mockData[0];
+  const location = useLocation();  // Hook to access the URL
+  const navigate = useNavigate();  // Hook to navigate programmatically
 
-  // 3.1) Compute overall score (0-10) for user
+  // 3.1) Manage Selected Athlete
+  const [selectedAthleteId, setSelectedAthleteId] = useState(mockData[0].id);
+
+  // 3.2) Automatically select athlete based on URL parameters
+  useEffect(() => {
+    const searchParams = new URLSearchParams(location.search);
+    const athleteIdFromUrl = searchParams.get('id');      // ?id=3
+    const athleteNameFromUrl = searchParams.get('name');  // ?name=Jonathan
+
+    if (athleteIdFromUrl) {
+      const athleteId = parseInt(athleteIdFromUrl, 10);
+      const athleteExists = mockData.some(a => a.id === athleteId);
+      if (athleteExists) {
+        setSelectedAthleteId(athleteId);
+      } else {
+        // If athlete ID doesn't exist, navigate to default or show an error
+        navigate('/', { replace: true });
+      }
+    }
+  }, [location.search, navigate]);
+
+  // Find the selected athlete from mockData
+  const selectedAthlete = mockData.find(athlete => athlete.id === selectedAthleteId);
+
+  // 3.3) Compute overall score (0-10) for user
   const computeOverallScore = (p) => {
     let sum = 0, count = 0;
     for (const key in p) {
@@ -934,7 +529,7 @@ function App() {
     return count === 0 ? 0 : parseFloat((sum / count).toFixed(1));
   };
 
-  // 3.2) Group data into categories (unchanged from your code)
+  // 3.4) Group data into categories
   const getCategoryData = (p) => ({
     physical: [
       { key: 'speed_explosiveness', label: 'Speed & Explosiveness' },
@@ -1024,18 +619,17 @@ function App() {
     ],
   });
 
-  // 3.3) We fetch the categories
-  const categories = getCategoryData(player);
-
   // 3.4) We'll keep track of the active tab, default to "home"
   const [activeTab, setActiveTab] = useState('home');
 
   // 3.5) Precompute the main category averages for radial tab display
   const [averages, setAverages] = useState({});
   useEffect(() => {
-    const newAvg = computeCategoryAverages(player);
-    setAverages(newAvg);
-  }, [player]);
+    if (selectedAthlete) {
+      const newAvg = computeCategoryAverages(selectedAthlete);
+      setAverages(newAvg);
+    }
+  }, [selectedAthlete]);
 
   // 3.6) Radar example for “Throw Comparison” inside Offensive
   const radarLabels = [
@@ -1047,12 +641,12 @@ function App() {
     'Specialty Accuracy',
   ];
   const radarDataValues = [
-    player.backhand_power,
-    player.forehand_power,
-    player.specialty_power,
-    player.backhand_accuracy,
-    player.forehand_accuracy,
-    player.specialty_accuracy,
+    selectedAthlete.backhand_power,
+    selectedAthlete.forehand_power,
+    selectedAthlete.specialty_power,
+    selectedAthlete.backhand_accuracy,
+    selectedAthlete.forehand_accuracy,
+    selectedAthlete.specialty_accuracy,
   ];
 
   /* -------------------------------------
@@ -1062,35 +656,38 @@ function App() {
     <div className="min-h-screen bg-gray-900 text-gray-100 flex flex-col">
       {/** 1) Profile Header at the top */}
       <ProfileHeader
-        name={player.name}
-        email={player.email}
+        name={selectedAthlete.name}
+        email={selectedAthlete.email}
         overallScore={
           activeTab === 'home'
-            ? computeOverallScore(player)
+            ? computeOverallScore(selectedAthlete)
             : averages[activeTab] || 0
         }
+        athletes={mockData}
+        selectedAthleteId={selectedAthleteId}
+        onSelectAthlete={(id) => setSelectedAthleteId(id)} // Pass a handler
       />
 
-      {/** 2) The radial nav row (icons + radial) for Home, Physical, Offensive, Defensive, Mental */}
+      {/** 3) The radial nav row (icons + radial) for Home, Physical, Offensive, Defensive, Mental */}
       <RadialTabs
         activeTab={activeTab}
         onChangeTab={setActiveTab}
         averages={averages}
       />
 
-      {/** 3) Scrollable content below the radial nav */}
+      {/** 4) Scrollable content below the radial nav */}
       <div className="flex-1 overflow-auto px-4 pb-8 mt-4">
         {/** HOME (Dashboard) */}
         {activeTab === 'home' && (
-          <HomeSection player={player} />
+          <HomeSection player={selectedAthlete} />
         )}
 
         {/** PHYSICAL */}
         {activeTab === 'physical' && (
           <CategorySection
             title="Physical Attributes"
-            skills={categories.physical}
-            player={player}
+            skills={getCategoryData(selectedAthlete).physical}
+            player={selectedAthlete}
           />
         )}
 
@@ -1098,8 +695,8 @@ function App() {
         {activeTab === 'offensive' && (
           <>
             <OffensiveSection
-              offensiveData={categories.offensive}
-              player={player}
+              offensiveData={getCategoryData(selectedAthlete).offensive}
+              player={selectedAthlete}
             />
             {/* Example: A Throw Comparison Radar Chart */}
             <div className="mt-6">
@@ -1115,8 +712,8 @@ function App() {
         {activeTab === 'defensive' && (
           <CategorySection
             title="Defensive Skills"
-            skills={categories.defensive}
-            player={player}
+            skills={getCategoryData(selectedAthlete).defensive}
+            player={selectedAthlete}
           />
         )}
 
@@ -1124,8 +721,8 @@ function App() {
         {activeTab === 'mental' && (
           <CategorySection
             title="Mental & Recovery"
-            skills={categories.mental}
-            player={player}
+            skills={getCategoryData(selectedAthlete).mental}
+            player={selectedAthlete}
           />
         )}
       </div>
@@ -1147,6 +744,92 @@ test('renders learn react link', () => {
   const linkElement = screen.getByText(/learn react/i);
   expect(linkElement).toBeInTheDocument();
 });
+
+
+File: src\components\AthleteDropdown.jsx
+================================================================================
+
+// src/components/AthleteDropdown.jsx
+
+import React, { useState, useRef, useEffect } from 'react';
+import { ChevronDown } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+
+const AthleteDropdown = ({ athletes, selectedAthleteId, onSelectAthlete }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef();
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(event.target)
+      ) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
+
+  // Get the selected athlete's name
+  const selectedAthlete = athletes.find(a => a.id === selectedAthleteId);
+
+  return (
+    <div className="absolute top-4 right-4 md:top-6 md:right-6" ref={dropdownRef}>
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="flex items-center bg-gray-800 text-gray-300 hover:bg-gray-700 px-3 py-2 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500"
+        aria-haspopup="listbox"
+        aria-expanded={isOpen}
+      >
+        <span className="mr-2 text-sm">{selectedAthlete ? selectedAthlete.name : "Select Athlete"}</span>
+        <ChevronDown className="w-4 h-4" aria-hidden="true" />
+      </button>
+
+      <AnimatePresence>
+        {isOpen && (
+          <motion.div
+            className="mt-2 w-48 bg-gray-800 rounded-md shadow-lg z-30"
+            role="listbox"
+            aria-labelledby="athlete-dropdown"
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            transition={{ duration: 0.2 }}
+          >
+            <ul className="py-1">
+              {athletes.map(athlete => (
+                <li key={athlete.id}>
+                  <button
+                    onClick={() => {
+                      onSelectAthlete(athlete.id);
+                      setIsOpen(false);
+                    }}
+                    className={`w-full text-left px-4 py-2 text-sm ${
+                      athlete.id === selectedAthleteId
+                        ? 'bg-gray-700 text-white'
+                        : 'text-gray-300 hover:bg-gray-700 hover:text-white'
+                    }`}
+                    role="option"
+                    aria-selected={athlete.id === selectedAthleteId}
+                  >
+                    {athlete.name}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+};
+
+export default AthleteDropdown;
 
 
 File: src\components\CategorySection.jsx
@@ -1175,119 +858,6 @@ const CategorySection = ({ title, skills, player }) => {
 };
 
 export default CategorySection;
-
-
-File: src\components\HomeSection.jsx
-================================================================================
-
-// src/components/HomeSection.jsx
-
-import React, { useEffect, useState } from 'react';
-import InsightsSection from './InsightsSection';
-import { Radar } from 'react-chartjs-2';
-import {
-  Chart as ChartJS,
-  RadialLinearScale,
-  PointElement,
-  LineElement,
-  Filler,
-  Tooltip,
-  Legend,
-} from 'chart.js';
-
-ChartJS.register(
-  RadialLinearScale,
-  PointElement,
-  LineElement,
-  Filler,
-  Tooltip,
-  Legend
-);
-
-function HomeSection({ player, averages }) {
-  // Optionally, store chart data in local state
-  const [radarData, setRadarData] = useState(null);
-
-  useEffect(() => {
-    // Construct the data for the radar chart
-    const labels = ['Mental', 'Physical', 'Cutting', 'Throwing', 'Defense', 'Handling'];
-    const values = [
-      averages.mental,
-      averages.physical,
-      averages.cutting,
-      averages.throwing,
-      averages.defense,
-      averages.handling,
-    ];
-
-    const newData = {
-      labels,
-      datasets: [
-        {
-          label: 'Category Averages',
-          data: values,
-          backgroundColor: 'rgba(16, 185, 129, 0.2)', // emerald-500 at 20% opacity
-          borderColor: 'rgba(16, 185, 129, 1)',        // emerald-500
-          borderWidth: 2,
-          pointBackgroundColor: 'rgba(16, 185, 129, 1)',
-        },
-      ],
-    };
-    setRadarData(newData);
-  }, [averages]);
-
-  const radarOptions = {
-    scales: {
-      r: {
-        beginAtZero: true,
-        max: 10,
-        ticks: {
-          color: '#e2e8f0', // text-gray-200
-          backdropColor: 'transparent',
-        },
-        grid: {
-          color: '#4b5563', // text-gray-600
-        },
-        angleLines: {
-          color: '#4b5563', // text-gray-600
-        },
-        pointLabels: {
-          color: '#e2e8f0', // text-gray-200
-        },
-      },
-    },
-    plugins: {
-      legend: {
-        labels: {
-          color: '#e2e8f0', // text-gray-200
-        },
-      },
-    },
-    responsive: true,
-    maintainAspectRatio: false,
-  };
-
-  return (
-    <div className="space-y-6">
-      {/* 1) Key Insights */}
-      <InsightsSection player={player} />
-
-      {/* 2) Radar Chart */}
-      <div className="bg-gray-800 rounded-lg p-4 shadow-md">
-        <h2 className="text-lg font-semibold text-gray-100 mb-3">
-          Overall Averages
-        </h2>
-        <div className="w-full h-64">
-          {radarData && (
-            <Radar data={radarData} options={radarOptions} />
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-export default HomeSection;
 
 
 File: src\components\InsightsSection.jsx
@@ -1508,11 +1078,42 @@ File: src\components\ProfileHeader.jsx
 
 // src/components/ProfileHeader.jsx
 
-import React from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import OverallScoreRing from './OverallScoreRing';
-import backgroundImage from '../assets/background.jpg'; // Ensure the path is correct
+import backgroundImage from '../assets/background.jpg'; // Ensure this path is correct
+import { ChevronDown } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { useNavigate } from 'react-router-dom'; // Import useNavigate
 
-const ProfileHeader = ({ name, email, overallScore }) => {
+const ProfileHeader = ({ name, email, overallScore, athletes, selectedAthleteId, onSelectAthlete }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef();
+  const navigate = useNavigate(); // Hook to navigate
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
+
+  // Find the selected athlete
+  const selectedAthlete = athletes.find(a => a.id === selectedAthleteId);
+
+  if (!selectedAthlete) {
+    return (
+      <div className="text-center text-gray-300 py-10">
+        Loading athlete data...
+      </div>
+    );
+  }
+
   return (
     <div className="relative w-full h-56 md:h-64 lg:h-72 bg-gray-800 rounded-lg overflow-hidden">
       {/* Background Image */}
@@ -1523,6 +1124,7 @@ const ProfileHeader = ({ name, email, overallScore }) => {
       />
       {/* Overlay */}
       <div className="absolute inset-0 bg-black bg-opacity-40"></div>
+
       {/* Content */}
       <div className="relative z-10 flex flex-col items-center justify-center h-full px-4">
         {/* User Info */}
@@ -1530,10 +1132,55 @@ const ProfileHeader = ({ name, email, overallScore }) => {
           <h1 className="text-2xl md:text-3xl font-semibold text-white">{name}</h1>
           <p className="text-sm md:text-base text-gray-300 mt-1">{email}</p>
         </div>
+
         {/* Overall Score Ring */}
         <div className="mt-4">
           <OverallScoreRing overallScore={overallScore} />
         </div>
+      </div>
+
+      {/* Dropdown (Top-right corner) */}
+      <div ref={dropdownRef} className="absolute top-4 right-4 md:top-6 md:right-6 z-30">
+        <div
+          onClick={() => setIsOpen(!isOpen)}
+          className="cursor-pointer p-2 rounded-full hover:bg-gray-700 transition"
+        >
+          <ChevronDown className="w-6 h-6 text-white" />
+        </div>
+
+        <AnimatePresence>
+          {isOpen && (
+            <motion.div
+              className="mt-2 w-48 bg-gray-800 rounded-md shadow-xl z-50"
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              transition={{ duration: 0.2 }}
+            >
+              <ul className="py-1">
+                {athletes.map((athlete) => (
+                  <li key={athlete.id}>
+                    <button
+                      onClick={() => {
+                        onSelectAthlete(athlete.id);
+                        // Update the URL with both id and name
+                        navigate(`/?id=${athlete.id}&name=${encodeURIComponent(athlete.name)}`);
+                        setIsOpen(false);
+                      }}
+                      className={`w-full text-left px-4 py-2 text-sm ${
+                        athlete.id === selectedAthleteId
+                          ? 'bg-gray-700 text-white'
+                          : 'text-gray-300 hover:bg-gray-700 hover:text-white'
+                      }`}
+                    >
+                      {athlete.name}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </div>
   );
@@ -1545,7 +1192,7 @@ export default ProfileHeader;
 File: src\components\RadarChart.jsx
 ================================================================================
 
-// src/components/RadarChart.jsx
+/* src/components/RadarChart.jsx */
 
 import React from 'react';
 import { Radar } from 'react-chartjs-2';
@@ -1568,54 +1215,108 @@ ChartJS.register(
   Legend
 );
 
-const RadarChart = ({ labels, dataValues }) => {
+/**
+ * RadarChart Component
+ * @param {Object} props - Component props
+ * @param {Array} props.labels - Labels for the radar chart axes
+ * @param {Array} props.dataValues - Data values for each axis
+ * @param {Function} props.onDataPointClick - Callback when a data point is clicked
+ */
+const RadarChart = ({ labels, dataValues, onDataPointClick }) => {
   const data = {
     labels,
     datasets: [
       {
-        label: 'Throw Ratings',
+        label: 'Category Scores',
         data: dataValues,
-        backgroundColor: 'rgba(16, 185, 129, 0.2)',  // emerald-500 @ 20%
-        borderColor: 'rgba(16, 185, 129, 1)',         // emerald-500
+        backgroundColor: 'rgba(16, 185, 129, 0.2)',
+        borderColor: 'rgba(16, 185, 129, 1)',
         borderWidth: 2,
         pointBackgroundColor: 'rgba(16, 185, 129, 1)',
+        pointBorderColor: '#fff',
+        pointHoverBackgroundColor: '#fff',
+        pointHoverBorderColor: 'rgba(16, 185, 129, 1)',
+        pointRadius: 3, // Reduced from 5 to 3
+        pointHoverRadius: 7, // Kept or adjusted as needed
+        pointHitRadius: 10, // Maintained for consistent touch area
       },
     ],
   };
 
   const options = {
+    responsive: true,
+    maintainAspectRatio: false, // Allows the chart to fill the container
     scales: {
       r: {
         beginAtZero: true,
         max: 10,
         ticks: {
-          color: '#e2e8f0',   // text-gray-200
+          stepSize: 2,
+          display: false,
           backdropColor: 'transparent',
         },
         grid: {
-          color: '#4b5563',   // text-gray-600
+          color: '#4b5563',
+          lineWidth: 1,
         },
         angleLines: {
-          color: '#4b5563',   // text-gray-600
+          color: '#4b5563',
+          lineWidth: 1,
         },
         pointLabels: {
-          color: '#e2e8f0',   // text-gray-200
+          color: '#e2e8f0',
+          font: {
+            size: 11,
+            family: 'Inter',
+          },
+          padding: 8,
         },
       },
     },
     plugins: {
       legend: {
-        labels: {
-          color: '#e2e8f0',  // text-gray-200
+        display: false,
+      },
+      tooltip: {
+        enabled: true,
+        backgroundColor: 'rgba(17, 24, 39, 0.95)',
+        padding: 8,
+        titleFont: {
+          size: 12,
+          family: 'Inter',
+        },
+        bodyFont: {
+          size: 11,
+          family: 'Inter',
+        },
+        displayColors: false,
+        callbacks: {
+          title: (items) => labels[items[0].dataIndex],
+          label: (item) => `${item.formattedValue}/10`,
         },
       },
     },
-    responsive: true,
-    maintainAspectRatio: false,
+    onClick: (event, elements) => {
+      if (elements.length > 0 && onDataPointClick) {
+        const { index, datasetIndex } = elements[0];
+        const label = labels[index];
+        const value = dataValues[index];
+        onDataPointClick({ label, value, index, datasetIndex });
+      }
+    },
+    // Optional: Change cursor to pointer on hover
+    onHover: (event, elements) => {
+      const target = event.native.target;
+      if (elements.length > 0) {
+        target.style.cursor = 'pointer';
+      } else {
+        target.style.cursor = 'default';
+      }
+    },
   };
 
   return (
-    <div className="w-full max-w-md mx-auto h-64">
+    <div className="w-full h-full">
       <Radar data={data} options={options} />
     </div>
   );
@@ -1840,6 +1541,188 @@ const SkillCard = ({ label, value }) => {
 export default SkillCard;
 
 
+File: src\components\SwipeableInsights.jsx
+================================================================================
+
+import React, { useState, useEffect } from 'react';
+import { motion, AnimatePresence, useAnimation } from 'framer-motion';
+
+const SWIPE_THRESHOLD = 30;
+const VELOCITY_THRESHOLD = 200;
+
+const InsightsCard = ({ title, data, subtitle }) => (
+  <div className="bg-gray-800 p-4 rounded-lg shadow-md w-full">
+    <div className="text-gray-300 text-xs font-bold uppercase tracking-widest mb-2">
+      <span className="font-semibold text-emerald-400">{title}</span>
+      {subtitle && (
+        <span className="block text-gray-400 text-xs mt-1 normal-case">
+          {subtitle}
+        </span>
+      )}
+    </div>
+    {data.map(([skillKey, skillValue], index) => (
+      <div key={index} className="flex justify-between mb-1">
+        <span className="capitalize text-gray-200">
+          {skillKey.replace(/_/g, ' ')}
+        </span>
+        <span className="text-emerald-400 font-semibold">
+          {skillValue}/10
+        </span>
+      </div>
+    ))}
+  </div>
+);
+
+const SwipeableInsights = ({ player }) => {
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
+  const controls = useAnimation();
+  const [containerWidth, setContainerWidth] = useState(0);
+
+  // Mock growth targets - in a real app, this would come from user data
+  const growthTargets = [
+    ['laying_out', player.laying_out],
+    ['endurance', player.endurance],
+    ['vertical_leap', player.vertical_leap]
+  ];
+
+  useEffect(() => {
+    const updateWidth = () => {
+      const container = document.querySelector('.insights-container');
+      if (container) {
+        setContainerWidth(container.offsetWidth);
+      }
+    };
+    
+    updateWidth();
+    window.addEventListener('resize', updateWidth);
+    return () => window.removeEventListener('resize', updateWidth);
+  }, []);
+
+  const getSortedSkills = () => {
+    const skillEntries = Object.entries(player).filter(([key, val]) => 
+      typeof val === 'number'
+    );
+    return skillEntries.sort((a, b) => b[1] - a[1]);
+  };
+
+  const cards = [
+    {
+      title: 'Current Growth Targets',
+      data: growthTargets
+    },
+    {
+      title: 'Top 3 Strengths',
+      data: getSortedSkills().slice(0, 3)
+    },
+    {
+      title: 'Areas for Improvement',
+      data: getSortedSkills().reverse().slice(0, 3)
+    }
+  ];
+
+  const snapToIndex = (index) => {
+    controls.start({
+      x: -index * containerWidth,
+      transition: {
+        type: "spring",
+        stiffness: 400,
+        damping: 40,
+        mass: 0.8,
+        restSpeed: 0.5,
+        restDelta: 0.5
+      }
+    }).then(() => {
+      setIsDragging(false);
+    });
+  };
+
+  const handleDragStart = () => {
+    setIsDragging(true);
+  };
+
+  const handleDragEnd = (event, info) => {
+    const swipe = info.offset.x;
+    const velocity = info.velocity.x;
+    
+    const shouldSwipe = Math.abs(swipe) > SWIPE_THRESHOLD || Math.abs(velocity) > VELOCITY_THRESHOLD;
+    
+    if (shouldSwipe) {
+      const direction = swipe > 0 ? -1 : 1;
+      const nextIndex = currentIndex + direction;
+      
+      if (nextIndex >= 0 && nextIndex < cards.length) {
+        setCurrentIndex(nextIndex);
+        snapToIndex(nextIndex);
+      } else {
+        snapToIndex(currentIndex);
+      }
+    } else {
+      snapToIndex(currentIndex);
+    }
+  };
+
+  const handleDotClick = (index) => {
+    if (!isDragging) {
+      setCurrentIndex(index);
+      snapToIndex(index);
+    }
+  };
+
+  return (
+    <div className="mb-6">
+      <h2 className="text-xl font-bold uppercase mb-3 text-gray-100">
+        Key Insights
+      </h2>
+      
+      <div className="relative insights-container overflow-hidden bg-gray-800 rounded-lg shadow-md">
+        <motion.div
+          className="flex"
+          style={{ width: `${cards.length * 100}%` }}
+          drag="x"
+          dragConstraints={{
+            left: -containerWidth * (cards.length - 1),
+            right: 0
+          }}
+          dragElastic={0.1}
+          dragMomentum={false}
+          onDragStart={handleDragStart}
+          onDragEnd={handleDragEnd}
+          animate={controls}
+          initial={{ x: 0 }}
+        >
+          {cards.map((card, index) => (
+            <div
+              key={index}
+              style={{ width: containerWidth }}
+            >
+              <InsightsCard {...card} />
+            </div>
+          ))}
+        </motion.div>
+      </div>
+
+      {/* Navigation Dots */}
+      <div className="flex justify-center mt-4 space-x-3">
+        {cards.map((_, index) => (
+          <button
+            key={index}
+            onClick={() => handleDotClick(index)}
+            className={`w-2 h-2 rounded-full transition-all duration-200 ${
+              index === currentIndex 
+                ? 'bg-emerald-400 scale-110' 
+                : 'bg-gray-600 hover:bg-gray-500'
+            }`}
+            disabled={isDragging}
+          />
+        ))}
+      </div>
+    </div>
+  );
+};
+
+export default SwipeableInsights;
+
 File: src\components\Tabs.jsx
 ================================================================================
 
@@ -1942,78 +1825,149 @@ File: src\data\mockData.js
 // src/data/mockData.js
 
 const mockData = [
-    {
-      name: "Jonathan Mast",
-      email: "jon1mast@gmail.com",
-      speed_explosiveness: 4,
-      endurance: 3,
-      vertical_leap: 3,
-      change_of_direction: 5,
-      boxing_out: 7,
-      laying_out: 1,
-      recovery: 6,
-      flexibility_mobility: 7,
-      injury_prevention: 4,
-      defensive_strategy: 7,
-      offensive_strategy: 9,
-      mental_game: 9,
-      feedback_implementation: 10,
-      isolation_cutting: 3,
-      continuation_cutting: 4,
-      angles: 6,
-      fakes_footwork: 5,
-      timing_field_vision: 6,
-      decisiveness: 5,
-      catching: 9,
-      zone_offense: 8,
-      reading_the_disc: 9,
-      normal_marking: 8,
-      sideline_trap_marking: 9,
-      downfield_defending: 4,
-      handler_defending: 6,
-      defensive_pattern_recognition: 6,
-      help_defense: 8,
-      switching_on_defense: 8,
-      zone_defense: 6,
-      defensive_mental_fortitude: 4,
-      handler_movement: 10,
-      poise_with_disc: 10,
-      breaking_the_mark: 9,
-      resetting_from_trap_sideline: 9,
-      decision_making_vision: 8,
-      flow_awareness: 9,
-      throw_and_go: 8,
-      offensive_pattern_recognition: 9,
-      backhand_power: 9,
-      backhand_accuracy: 9,
-      backhand_quick_release: 9,
-      backhand_release_variations: 9,
-      backhand_against_wind: 8,
-      backhand_against_difficult_marks: 9,
-      backhand_tempo_control: 9,
-      forehand_power: 8,
-      forehand_accuracy: 9,
-      forehand_quick_release: 10,
-      forehand_release_variations: 10,
-      forehand_against_wind: 8,
-      forehand_against_difficult_marks: 10,
-      forehand_tempo_control: 10,
-      specialty_power: 8,
-      specialty_accuracy: 8,
-      specialty_quick_release: 8,
-      specialty_release_variations: 10,
-      specialty_against_wind: 6,
-      specialty_against_difficult_marks: 8,
-      specialty_tempo_control: 8,
-      hucking_confidence: 7,
-      hucking_shape_control: 7,
-      hucking_tempo_control: 7,
-      hucking_placement: 9
-    },
-  ];
-  
-  export default mockData;
-  
+  {
+    id: 1, // Unique identifier for each athlete
+    name: "Jonathan Mast",
+    email: "jon1mast@gmail.com",
+    speed_explosiveness: 4,
+    endurance: 3,
+    vertical_leap: 3,
+    change_of_direction: 5,
+    boxing_out: 7,
+    laying_out: 1,
+    recovery: 6,
+    flexibility_mobility: 7,
+    injury_prevention: 4,
+    defensive_strategy: 7,
+    offensive_strategy: 9,
+    mental_game: 9,
+    feedback_implementation: 10,
+    isolation_cutting: 3,
+    continuation_cutting: 4,
+    angles: 6,
+    fakes_footwork: 5,
+    timing_field_vision: 6,
+    decisiveness: 5,
+    catching: 9,
+    zone_offense: 8,
+    reading_the_disc: 9,
+    normal_marking: 8,
+    sideline_trap_marking: 9,
+    downfield_defending: 4,
+    handler_defending: 6,
+    defensive_pattern_recognition: 6,
+    help_defense: 8,
+    switching_on_defense: 8,
+    zone_defense: 6,
+    defensive_mental_fortitude: 4,
+    handler_movement: 10,
+    poise_with_disc: 10,
+    breaking_the_mark: 9,
+    resetting_from_trap_sideline: 9,
+    decision_making_vision: 8,
+    flow_awareness: 9,
+    throw_and_go: 8,
+    offensive_pattern_recognition: 9,
+    backhand_power: 9,
+    backhand_accuracy: 9,
+    backhand_quick_release: 9,
+    backhand_release_variations: 9,
+    backhand_against_wind: 8,
+    backhand_against_difficult_marks: 9,
+    backhand_tempo_control: 9,
+    forehand_power: 8,
+    forehand_accuracy: 9,
+    forehand_quick_release: 10,
+    forehand_release_variations: 10,
+    forehand_against_wind: 8,
+    forehand_against_difficult_marks: 10,
+    forehand_tempo_control: 10,
+    specialty_power: 8,
+    specialty_accuracy: 8,
+    specialty_quick_release: 8,
+    specialty_release_variations: 10,
+    specialty_against_wind: 6,
+    specialty_against_difficult_marks: 8,
+    specialty_tempo_control: 8,
+    hucking_confidence: 7,
+    hucking_shape_control: 7,
+    hucking_tempo_control: 7,
+    hucking_placement: 9
+  },
+  {
+    id: 2,
+    name: "Emily Clark",
+    email: "emily.clark@example.com",
+    speed_explosiveness: 7,
+    endurance: 8,
+    vertical_leap: 6,
+    change_of_direction: 7,
+    boxing_out: 5,
+    laying_out: 4,
+    recovery: 7,
+    flexibility_mobility: 8,
+    injury_prevention: 6,
+    defensive_strategy: 8,
+    offensive_strategy: 7,
+    mental_game: 8,
+    feedback_implementation: 9,
+    isolation_cutting: 6,
+    continuation_cutting: 7,
+    angles: 7,
+    fakes_footwork: 8,
+    timing_field_vision: 7,
+    decisiveness: 8,
+    catching: 7,
+    zone_offense: 6,
+    reading_the_disc: 8,
+    normal_marking: 7,
+    sideline_trap_marking: 6,
+    downfield_defending: 7,
+    handler_defending: 7,
+    defensive_pattern_recognition: 7,
+    help_defense: 7,
+    switching_on_defense: 7,
+    zone_defense: 7,
+    defensive_mental_fortitude: 7,
+    handler_movement: 8,
+    poise_with_disc: 8,
+    breaking_the_mark: 7,
+    resetting_from_trap_sideline: 7,
+    decision_making_vision: 7,
+    flow_awareness: 7,
+    throw_and_go: 7,
+    offensive_pattern_recognition: 7,
+    backhand_power: 7,
+    backhand_accuracy: 7,
+    backhand_quick_release: 7,
+    backhand_release_variations: 7,
+    backhand_against_wind: 7,
+    backhand_against_difficult_marks: 7,
+    backhand_tempo_control: 7,
+    forehand_power: 7,
+    forehand_accuracy: 7,
+    forehand_quick_release: 7,
+    forehand_release_variations: 7,
+    forehand_against_wind: 7,
+    forehand_against_difficult_marks: 7,
+    forehand_tempo_control: 7,
+    specialty_power: 7,
+    specialty_accuracy: 7,
+    specialty_quick_release: 7,
+    specialty_release_variations: 7,
+    specialty_against_wind: 7,
+    specialty_against_difficult_marks: 7,
+    specialty_tempo_control: 7,
+    hucking_confidence: 7,
+    hucking_shape_control: 7,
+    hucking_tempo_control: 7,
+    hucking_placement: 7
+  },
+  // Add more athletes as needed
+];
+
+export default mockData;
+
 
 File: src\index.css
 ================================================================================
@@ -2031,18 +1985,21 @@ body {
 File: src\index.js
 ================================================================================
 
-// index.js
+// src/index.js
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import './index.css';
-import App from './App';
+import App from './App.jsx';
+import { BrowserRouter } from 'react-router-dom'; // Import BrowserRouter
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(
   <React.StrictMode>
-    <div className="dark">  {/* <-- Force dark mode */}
-      <App />
-    </div>
+    <BrowserRouter> {/* Wrap App with BrowserRouter */}
+      <div className="dark">  {/* <-- Force dark mode */}
+        <App />
+      </div>
+    </BrowserRouter>
   </React.StrictMode>
 );
 
@@ -2073,6 +2030,21 @@ File: src\setupTests.js
 // expect(element).toHaveTextContent(/react/i)
 // learn more: https://github.com/testing-library/jest-dom
 import '@testing-library/jest-dom';
+
+
+File: src\utils\slugify.js
+================================================================================
+
+// src/utils/slugify.js
+import slugify from 'slugify';
+
+export const createAthleteSlug = (name) => {
+  return slugify(name, {
+    lower: true,       // Convert to lowercase
+    strict: true,      // Remove special characters
+    remove: /[*+~.()'"!:@]/g, // Additional character removal if needed
+  });
+};
 
 
 File: tailwind.config.js
@@ -2143,446 +2115,21 @@ File: src\App.css
 }
 
 
-File: src\App.js
-================================================================================
-
-// src/App.jsx
-
-import React, { useState, useEffect } from 'react';
-import mockData from './data/mockData';
-
-// 1) Import your existing components
-import ProfileHeader from './components/ProfileHeader';
-import InsightsSection from './components/InsightsSection';
-import CategorySection from './components/CategorySection';
-import RadarChart from './components/RadarChart';
-import OffensiveSection from './components/OffensiveSection';
-
-// 2) Import the updated RadialTabs component
-import RadialTabs from './components/RadialTabs';
-
-import './index.css';
-
-/* -------------------------------------
-   1) HELPER FUNCTIONS
--------------------------------------- */
-
-// A small utility to average numeric values for a given list of keys
-function averageOfKeys(player, keys) {
-  let sum = 0, count = 0;
-  for (const key of keys) {
-    if (typeof player[key] === 'number') {
-      sum += player[key];
-      count++;
-    }
-  }
-  return count === 0 ? 0 : parseFloat((sum / count).toFixed(1));
-}
-
-// Compute category averages for Mental, Physical, Cutting, Throwing, Defense, Handling, Offensive
-function computeCategoryAverages(player) {
-  // 1) MENTAL
-  const mentalKeys = [
-    'mental_game',
-    'feedback_implementation',
-    'injury_prevention',
-    'recovery',
-    'flexibility_mobility',
-  ];
-
-  // 2) PHYSICAL
-  const physicalKeys = [
-    'speed_explosiveness',
-    'endurance',
-    'vertical_leap',
-    'change_of_direction',
-    'boxing_out',
-    'laying_out',
-    'recovery',
-    'flexibility_mobility',
-    'injury_prevention',
-  ];
-
-  // 3) CUTTING
-  const cuttingKeys = [
-    'angles',
-    'fakes_footwork',
-    'timing_field_vision',
-    'decisiveness',
-    'catching',
-    'flow_awareness',
-    'isolation_cutting',
-    'continuation_cutting',
-  ];
-
-  // 4) HANDLING
-  const handlingKeys = [
-    'handler_movement',
-    'poise_with_disc',
-    'breaking_the_mark',
-    'resetting_from_trap_sideline',
-    'decision_making_vision',
-    'offensive_pattern_recognition',
-    'throw_and_go',
-  ];
-
-  // 5) THROWING (Backhand, Forehand, Specialty, Hucking)
-  const throwingKeys = [
-    // Backhand
-    'backhand_power',
-    'backhand_accuracy',
-    'backhand_quick_release',
-    'backhand_release_variations',
-    'backhand_against_wind',
-    'backhand_against_difficult_marks',
-    'backhand_tempo_control',
-    // Forehand
-    'forehand_power',
-    'forehand_accuracy',
-    'forehand_quick_release',
-    'forehand_release_variations',
-    'forehand_against_wind',
-    'forehand_against_difficult_marks',
-    'forehand_tempo_control',
-    // Specialty
-    'specialty_power',
-    'specialty_accuracy',
-    'specialty_quick_release',
-    'specialty_release_variations',
-    'specialty_against_wind',
-    'specialty_against_difficult_marks',
-    'specialty_tempo_control',
-    // Hucking
-    'hucking_confidence',
-    'hucking_shape_control',
-    'hucking_tempo_control',
-    'hucking_placement',
-  ];
-
-  // 6) DEFENSE
-  const defenseKeys = [
-    'defensive_strategy',
-    'normal_marking',
-    'sideline_trap_marking',
-    'downfield_defending',
-    'handler_defending',
-    'defensive_pattern_recognition',
-    'help_defense',
-    'switching_on_defense',
-    'zone_defense',
-    'defensive_mental_fortitude',
-  ];
-
-  // Compute individual averages
-  const mental = averageOfKeys(player, mentalKeys);
-  const physical = averageOfKeys(player, physicalKeys);
-  const cutting = averageOfKeys(player, cuttingKeys);
-  const handling = averageOfKeys(player, handlingKeys);
-  const throwing = averageOfKeys(player, throwingKeys);
-  const defensive = averageOfKeys(player, defenseKeys);
-
-  // 7) OFFENSIVE
-  // Offensive is computed as the average of cutting, handling, throwing
-  const offensive = parseFloat(((cutting + handling + throwing) / 3).toFixed(1));
-
-  return {
-    mental,
-    physical,
-    cutting,
-    handling,
-    throwing,
-    defensive,
-    offensive, // Ensure this key matches RadialTabs expectation
-  };
-}
-
-/* -------------------------------------
-   2) HOME SECTION (DASHBOARD)
--------------------------------------- */
-
-function HomeSection({ player }) {
-  const [averages, setAverages] = useState({
-    mental: 0,
-    physical: 0,
-    cutting: 0,
-    handling: 0,
-    throwing: 0,
-    defensive: 0,
-    offensive: 0, // Added offensive to maintain consistency
-  });
-
-  useEffect(() => {
-    const avg = computeCategoryAverages(player);
-    setAverages(avg);
-  }, [player]);
-
-  // Radar chart data for 6 categories
-  const radarLabels = ['Mental', 'Physical', 'Cutting', 'Handling', 'Throwing', 'Defense'];
-  const radarDataValues = [
-    averages.mental,
-    averages.physical,
-    averages.cutting,
-    averages.handling,
-    averages.throwing,
-    averages.defensive,
-  ];
-
-  return (
-    <div className="space-y-6">
-      {/* Key Insights (Top 3 strengths, etc.) */}
-      <InsightsSection player={player} />
-
-      {/* Radar Chart for 6 main categories */}
-      <div className="bg-gray-800 p-4 rounded-lg shadow-md">
-        <h2 className="text-lg font-semibold text-gray-100 mb-3">
-          Category Averages
-        </h2>
-        <div className="w-full h-64">
-          <RadarChart labels={radarLabels} dataValues={radarDataValues} />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* -------------------------------------
-   3) MAIN APP
--------------------------------------- */
-
-function App() {
-  // Grab first player from mock data
-  const player = mockData[0];
-
-  // 3.1) Compute overall score (0-10) for user
-  const computeOverallScore = (p) => {
-    let sum = 0, count = 0;
-    for (const key in p) {
-      if (typeof p[key] === 'number') {
-        sum += p[key];
-        count++;
-      }
-    }
-    return count === 0 ? 0 : parseFloat((sum / count).toFixed(1));
-  };
-
-  // 3.2) Group data into categories (unchanged from your code)
-  const getCategoryData = (p) => ({
-    physical: [
-      { key: 'speed_explosiveness', label: 'Speed & Explosiveness' },
-      { key: 'endurance', label: 'Endurance' },
-      { key: 'vertical_leap', label: 'Vertical Leap' },
-      { key: 'change_of_direction', label: 'Change of Direction' },
-      { key: 'boxing_out', label: 'Boxing Out' },
-      { key: 'laying_out', label: 'Laying Out' },
-      { key: 'recovery', label: 'Recovery' },
-      { key: 'flexibility_mobility', label: 'Flexibility & Mobility' },
-      { key: 'injury_prevention', label: 'Injury Prevention' },
-    ],
-    offensive: {
-      cutting: [
-        { key: 'angles', label: 'Angles' },
-        { key: 'fakes_footwork', label: 'Fakes & Footwork' },
-        { key: 'timing_field_vision', label: 'Timing & Field Vision' },
-        { key: 'decisiveness', label: 'Decisiveness' },
-        { key: 'catching', label: 'Catching' },
-        { key: 'flow_awareness', label: 'Flow Awareness' },
-        { key: 'isolation_cutting', label: 'Isolation Cutting' },
-        { key: 'continuation_cutting', label: 'Continuation Cutting' },
-      ],
-      handling: [
-        { key: 'handler_movement', label: 'Handler Movement' },
-        { key: 'poise_with_disc', label: 'Poise w/ Disc' },
-        { key: 'breaking_the_mark', label: 'Breaking the Mark' },
-        { key: 'resetting_from_trap_sideline', label: 'Reset from Trap' },
-        { key: 'decision_making_vision', label: 'Decision Making & Vision' },
-        { key: 'offensive_pattern_recognition', label: 'Pattern Recognition' },
-        { key: 'throw_and_go', label: 'Throw & Go' },
-      ],
-      throwing: {
-        backhand: [
-          { key: 'backhand_power', label: 'Backhand Power' },
-          { key: 'backhand_accuracy', label: 'Backhand Accuracy' },
-          { key: 'backhand_quick_release', label: 'Backhand Quick Release' },
-          { key: 'backhand_release_variations', label: 'Backhand Variations' },
-          { key: 'backhand_against_wind', label: 'Backhand vs Wind' },
-          { key: 'backhand_against_difficult_marks', label: 'Backhand vs Difficult Marks' },
-          { key: 'backhand_tempo_control', label: 'Backhand Tempo Control' },
-        ],
-        forehand: [
-          { key: 'forehand_power', label: 'Forehand Power' },
-          { key: 'forehand_accuracy', label: 'Forehand Accuracy' },
-          { key: 'forehand_quick_release', label: 'Forehand Quick Release' },
-          { key: 'forehand_release_variations', label: 'Forehand Variations' },
-          { key: 'forehand_against_wind', label: 'Forehand vs Wind' },
-          { key: 'forehand_against_difficult_marks', label: 'Forehand vs Difficult Marks' },
-          { key: 'forehand_tempo_control', label: 'Forehand Tempo Control' },
-        ],
-        specialty: [
-          { key: 'specialty_power', label: 'Specialty Power' },
-          { key: 'specialty_accuracy', label: 'Specialty Accuracy' },
-          { key: 'specialty_quick_release', label: 'Specialty Quick Release' },
-          { key: 'specialty_release_variations', label: 'Specialty Variations' },
-          { key: 'specialty_against_wind', label: 'Specialty vs Wind' },
-          { key: 'specialty_against_difficult_marks', label: 'Specialty vs Difficult Marks' },
-          { key: 'specialty_tempo_control', label: 'Specialty Tempo Control' },
-        ],
-        hucking: [
-          { key: 'hucking_confidence', label: 'Hucking Confidence' },
-          { key: 'hucking_shape_control', label: 'Hucking Shape Control' },
-          { key: 'hucking_tempo_control', label: 'Hucking Tempo Control' },
-          { key: 'hucking_placement', label: 'Hucking Placement' },
-        ],
-      },
-    },
-    defensive: [
-      { key: 'defensive_strategy', label: 'Defensive Strategy' },
-      { key: 'normal_marking', label: 'Normal Marking' },
-      { key: 'sideline_trap_marking', label: 'Sideline Trap Marking' },
-      { key: 'downfield_defending', label: 'Downfield Defending' },
-      { key: 'handler_defending', label: 'Handler Defending' },
-      { key: 'defensive_pattern_recognition', label: 'Pattern Recognition' },
-      { key: 'help_defense', label: 'Help Defense' },
-      { key: 'switching_on_defense', label: 'Switching on Defense' },
-      { key: 'zone_defense', label: 'Zone Defense' },
-      { key: 'defensive_mental_fortitude', label: 'Defensive Mental Fortitude' },
-    ],
-    mental: [
-      { key: 'mental_game', label: 'Mental Game' },
-      { key: 'feedback_implementation', label: 'Feedback Implementation' },
-      { key: 'injury_prevention', label: 'Injury Prevention' },
-      { key: 'recovery', label: 'Recovery' },
-      { key: 'flexibility_mobility', label: 'Flexibility & Mobility' },
-    ],
-  });
-
-  // 3.3) We fetch the categories
-  const categories = getCategoryData(player);
-
-  // 3.4) We'll keep track of the active tab, default to "home"
-  const [activeTab, setActiveTab] = useState('home');
-
-  // 3.5) Precompute the main category averages for radial tab display
-  const [averages, setAverages] = useState({});
-  useEffect(() => {
-    const newAvg = computeCategoryAverages(player);
-    setAverages(newAvg);
-  }, [player]);
-
-  // 3.6) Radar example for “Throw Comparison” inside Offensive
-  const radarLabels = [
-    'Backhand Power',
-    'Forehand Power',
-    'Specialty Power',
-    'Backhand Accuracy',
-    'Forehand Accuracy',
-    'Specialty Accuracy',
-  ];
-  const radarDataValues = [
-    player.backhand_power,
-    player.forehand_power,
-    player.specialty_power,
-    player.backhand_accuracy,
-    player.forehand_accuracy,
-    player.specialty_accuracy,
-  ];
-
-  /* -------------------------------------
-     RENDER
-  -------------------------------------- */
-  return (
-    <div className="min-h-screen bg-gray-900 text-gray-100 flex flex-col">
-      {/** 1) Profile Header at the top */}
-      <ProfileHeader
-        name={player.name}
-        email={player.email}
-        overallScore={
-          activeTab === 'home'
-            ? computeOverallScore(player)
-            : averages[activeTab] || 0
-        }
-      />
-
-      {/** 2) The radial nav row (icons + radial) for Home, Physical, Offensive, Defensive, Mental */}
-      <RadialTabs
-        activeTab={activeTab}
-        onChangeTab={setActiveTab}
-        averages={averages}
-      />
-
-      {/** 3) Scrollable content below the radial nav */}
-      <div className="flex-1 overflow-auto px-4 pb-8 mt-4">
-        {/** HOME (Dashboard) */}
-        {activeTab === 'home' && (
-          <HomeSection player={player} />
-        )}
-
-        {/** PHYSICAL */}
-        {activeTab === 'physical' && (
-          <CategorySection
-            title="Physical Attributes"
-            skills={categories.physical}
-            player={player}
-          />
-        )}
-
-        {/** OFFENSIVE */}
-        {activeTab === 'offensive' && (
-          <>
-            <OffensiveSection
-              offensiveData={categories.offensive}
-              player={player}
-            />
-            {/* Example: A Throw Comparison Radar Chart */}
-            <div className="mt-6">
-              <h2 className="text-xl font-semibold mb-2 text-gray-100">
-                Throw Comparison
-              </h2>
-              <RadarChart labels={radarLabels} dataValues={radarDataValues} />
-            </div>
-          </>
-        )}
-
-        {/** DEFENSIVE */}
-        {activeTab === 'defensive' && (
-          <CategorySection
-            title="Defensive Skills"
-            skills={categories.defensive}
-            player={player}
-          />
-        )}
-
-        {/** MENTAL */}
-        {activeTab === 'mental' && (
-          <CategorySection
-            title="Mental & Recovery"
-            skills={categories.mental}
-            player={player}
-          />
-        )}
-      </div>
-    </div>
-  );
-}
-
-export default App;
-
-
 File: src\App.jsx
 ================================================================================
 
 // src/App.jsx
 
 import React, { useState, useEffect } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom'; // Import both hooks
 import mockData from './data/mockData';
 
-// 1) Import your existing components
+// Import your existing components
 import ProfileHeader from './components/ProfileHeader';
-import InsightsSection from './components/InsightsSection';
+import SwipeableInsights from './components/SwipeableInsights';
 import CategorySection from './components/CategorySection';
 import RadarChart from './components/RadarChart';
 import OffensiveSection from './components/OffensiveSection';
-
-// 2) Import the updated RadialTabs component
 import RadialTabs from './components/RadialTabs';
 
 import './index.css';
@@ -2605,108 +2152,99 @@ function averageOfKeys(player, keys) {
 
 // Compute category averages for Mental, Physical, Cutting, Throwing, Defense, Handling, Offensive
 function computeCategoryAverages(player) {
-  // 1) MENTAL
-  const mentalKeys = [
-    'mental_game',
-    'feedback_implementation',
-    'injury_prevention',
-    'recovery',
-    'flexibility_mobility',
-  ];
-
-  // 2) PHYSICAL
-  const physicalKeys = [
-    'speed_explosiveness',
-    'endurance',
-    'vertical_leap',
-    'change_of_direction',
-    'boxing_out',
-    'laying_out',
-    'recovery',
-    'flexibility_mobility',
-    'injury_prevention',
-  ];
-
-  // 3) CUTTING
-  const cuttingKeys = [
-    'angles',
-    'fakes_footwork',
-    'timing_field_vision',
-    'decisiveness',
-    'catching',
-    'flow_awareness',
-    'isolation_cutting',
-    'continuation_cutting',
-  ];
-
-  // 4) HANDLING
-  const handlingKeys = [
-    'handler_movement',
-    'poise_with_disc',
-    'breaking_the_mark',
-    'resetting_from_trap_sideline',
-    'decision_making_vision',
-    'offensive_pattern_recognition',
-    'throw_and_go',
-  ];
-
-  // 5) THROWING (Backhand, Forehand, Specialty, Hucking)
-  const throwingKeys = [
-    // Backhand
-    'backhand_power',
-    'backhand_accuracy',
-    'backhand_quick_release',
-    'backhand_release_variations',
-    'backhand_against_wind',
-    'backhand_against_difficult_marks',
-    'backhand_tempo_control',
-    // Forehand
-    'forehand_power',
-    'forehand_accuracy',
-    'forehand_quick_release',
-    'forehand_release_variations',
-    'forehand_against_wind',
-    'forehand_against_difficult_marks',
-    'forehand_tempo_control',
-    // Specialty
-    'specialty_power',
-    'specialty_accuracy',
-    'specialty_quick_release',
-    'specialty_release_variations',
-    'specialty_against_wind',
-    'specialty_against_difficult_marks',
-    'specialty_tempo_control',
-    // Hucking
-    'hucking_confidence',
-    'hucking_shape_control',
-    'hucking_tempo_control',
-    'hucking_placement',
-  ];
-
-  // 6) DEFENSE
-  const defenseKeys = [
-    'defensive_strategy',
-    'normal_marking',
-    'sideline_trap_marking',
-    'downfield_defending',
-    'handler_defending',
-    'defensive_pattern_recognition',
-    'help_defense',
-    'switching_on_defense',
-    'zone_defense',
-    'defensive_mental_fortitude',
-  ];
+  // Define keys for each category
+  const categories = {
+    mental: [
+      'mental_game',
+      'feedback_implementation',
+      'injury_prevention',
+      'recovery',
+      'flexibility_mobility',
+    ],
+    physical: [
+      'speed_explosiveness',
+      'endurance',
+      'vertical_leap',
+      'change_of_direction',
+      'boxing_out',
+      'laying_out',
+      'recovery',
+      'flexibility_mobility',
+      'injury_prevention',
+    ],
+    cutting: [
+      'angles',
+      'fakes_footwork',
+      'timing_field_vision',
+      'decisiveness',
+      'catching',
+      'flow_awareness',
+      'isolation_cutting',
+      'continuation_cutting',
+    ],
+    handling: [
+      'handler_movement',
+      'poise_with_disc',
+      'breaking_the_mark',
+      'resetting_from_trap_sideline',
+      'decision_making_vision',
+      'offensive_pattern_recognition',
+      'throw_and_go',
+    ],
+    throwing: [
+      // Backhand
+      'backhand_power',
+      'backhand_accuracy',
+      'backhand_quick_release',
+      'backhand_release_variations',
+      'backhand_against_wind',
+      'backhand_against_difficult_marks',
+      'backhand_tempo_control',
+      // Forehand
+      'forehand_power',
+      'forehand_accuracy',
+      'forehand_quick_release',
+      'forehand_release_variations',
+      'forehand_against_wind',
+      'forehand_against_difficult_marks',
+      'forehand_tempo_control',
+      // Specialty
+      'specialty_power',
+      'specialty_accuracy',
+      'specialty_quick_release',
+      'specialty_release_variations',
+      'specialty_against_wind',
+      'specialty_against_difficult_marks',
+      'specialty_tempo_control',
+      // Hucking
+      'hucking_confidence',
+      'hucking_shape_control',
+      'hucking_tempo_control',
+      'hucking_placement',
+    ],
+    defensive: [
+      'defensive_strategy',
+      'normal_marking',
+      'sideline_trap_marking',
+      'downfield_defending',
+      'handler_defending',
+      'defensive_pattern_recognition',
+      'help_defense',
+      'switching_on_defense',
+      'zone_defense',
+      'defensive_mental_fortitude',
+    ],
+  };
 
   // Compute individual averages
-  const mental = averageOfKeys(player, mentalKeys);
-  const physical = averageOfKeys(player, physicalKeys);
-  const cutting = averageOfKeys(player, cuttingKeys);
-  const handling = averageOfKeys(player, handlingKeys);
-  const throwing = averageOfKeys(player, throwingKeys);
-  const defensive = averageOfKeys(player, defenseKeys);
+  const mental = averageOfKeys(player, categories.mental);
+  const physical = averageOfKeys(player, categories.physical);
+  const cutting = averageOfKeys(player, categories.cutting);
+  const handling = averageOfKeys(player, categories.handling);
+  const throwing = averageOfKeys(player, categories.throwing);
+  const defensive = averageOfKeys(player, categories.defensive);
 
-  // 7) OFFENSIVE
-  // Offensive is computed as the average of cutting, handling, throwing
+  // Offensive is the average of cutting, handling, and throwing
   const offensive = parseFloat(((cutting + handling + throwing) / 3).toFixed(1));
 
   return {
@@ -2716,7 +2254,7 @@ function computeCategoryAverages(player) {
     handling,
     throwing,
     defensive,
-    offensive, // Ensure this key matches RadialTabs expectation
+    offensive,
   };
 }
 
@@ -2732,7 +2270,7 @@ function HomeSection({ player }) {
     handling: 0,
     throwing: 0,
     defensive: 0,
-    offensive: 0, // Added offensive to maintain consistency
+    offensive: 0,
   });
 
   useEffect(() => {
@@ -2752,17 +2290,20 @@ function HomeSection({ player }) {
   ];
 
   return (
-    <div className="space-y-6">
+    <div className="mx-auto space-y-4">
       {/* Key Insights (Top 3 strengths, etc.) */}
-      <InsightsSection player={player} />
+      <SwipeableInsights player={player} />
 
       {/* Radar Chart for 6 main categories */}
-      <div className="bg-gray-800 p-4 rounded-lg shadow-md">
-        <h2 className="text-lg font-semibold text-gray-100 mb-3">
+      <div className="bg-gray-800 p-5 rounded-lg shadow-md">
+        <h2 className="text-lg font-semibold text-gray-100 mb-4 mt-0">
           Category Averages
         </h2>
-        <div className="w-full h-64">
-          <RadarChart labels={radarLabels} dataValues={radarDataValues} />
+        {/* Center the RadarChart */}
+        <div className="w-full flex justify-center">
+          <div className="w-80 h-80">
+            <RadarChart labels={radarLabels} dataValues={radarDataValues} />
+          </div>
         </div>
       </div>
     </div>
@@ -2774,10 +2315,34 @@ function HomeSection({ player }) {
 -------------------------------------- */
 
 function App() {
-  // Grab first player from mock data
-  const player = mockData[0];
+  const location = useLocation();  // Hook to access the URL
+  const navigate = useNavigate();  // Hook to navigate programmatically
 
-  // 3.1) Compute overall score (0-10) for user
+  // 3.1) Manage Selected Athlete
+  const [selectedAthleteId, setSelectedAthleteId] = useState(mockData[0].id);
+
+  // 3.2) Automatically select athlete based on URL parameters
+  useEffect(() => {
+    const searchParams = new URLSearchParams(location.search);
+    const athleteIdFromUrl = searchParams.get('id');      // ?id=3
+    const athleteNameFromUrl = searchParams.get('name');  // ?name=Jonathan
+
+    if (athleteIdFromUrl) {
+      const athleteId = parseInt(athleteIdFromUrl, 10);
+      const athleteExists = mockData.some(a => a.id === athleteId);
+      if (athleteExists) {
+        setSelectedAthleteId(athleteId);
+      } else {
+        // If athlete ID doesn't exist, navigate to default or show an error
+        navigate('/', { replace: true });
+      }
+    }
+  }, [location.search, navigate]);
+
+  // Find the selected athlete from mockData
+  const selectedAthlete = mockData.find(athlete => athlete.id === selectedAthleteId);
+
+  // 3.3) Compute overall score (0-10) for user
   const computeOverallScore = (p) => {
     let sum = 0, count = 0;
     for (const key in p) {
@@ -2789,7 +2354,7 @@ function App() {
     return count === 0 ? 0 : parseFloat((sum / count).toFixed(1));
   };
 
-  // 3.2) Group data into categories (unchanged from your code)
+  // 3.4) Group data into categories
   const getCategoryData = (p) => ({
     physical: [
       { key: 'speed_explosiveness', label: 'Speed & Explosiveness' },
@@ -2879,18 +2444,17 @@ function App() {
     ],
   });
 
-  // 3.3) We fetch the categories
-  const categories = getCategoryData(player);
-
   // 3.4) We'll keep track of the active tab, default to "home"
   const [activeTab, setActiveTab] = useState('home');
 
   // 3.5) Precompute the main category averages for radial tab display
   const [averages, setAverages] = useState({});
   useEffect(() => {
-    const newAvg = computeCategoryAverages(player);
-    setAverages(newAvg);
-  }, [player]);
+    if (selectedAthlete) {
+      const newAvg = computeCategoryAverages(selectedAthlete);
+      setAverages(newAvg);
+    }
+  }, [selectedAthlete]);
 
   // 3.6) Radar example for “Throw Comparison” inside Offensive
   const radarLabels = [
@@ -2902,12 +2466,12 @@ function App() {
     'Specialty Accuracy',
   ];
   const radarDataValues = [
-    player.backhand_power,
-    player.forehand_power,
-    player.specialty_power,
-    player.backhand_accuracy,
-    player.forehand_accuracy,
-    player.specialty_accuracy,
+    selectedAthlete.backhand_power,
+    selectedAthlete.forehand_power,
+    selectedAthlete.specialty_power,
+    selectedAthlete.backhand_accuracy,
+    selectedAthlete.forehand_accuracy,
+    selectedAthlete.specialty_accuracy,
   ];
 
   /* -------------------------------------
@@ -2917,35 +2481,38 @@ function App() {
     <div className="min-h-screen bg-gray-900 text-gray-100 flex flex-col">
       {/** 1) Profile Header at the top */}
       <ProfileHeader
-        name={player.name}
-        email={player.email}
+        name={selectedAthlete.name}
+        email={selectedAthlete.email}
         overallScore={
           activeTab === 'home'
-            ? computeOverallScore(player)
+            ? computeOverallScore(selectedAthlete)
             : averages[activeTab] || 0
         }
+        athletes={mockData}
+        selectedAthleteId={selectedAthleteId}
+        onSelectAthlete={(id) => setSelectedAthleteId(id)} // Pass a handler
       />
 
-      {/** 2) The radial nav row (icons + radial) for Home, Physical, Offensive, Defensive, Mental */}
+      {/** 3) The radial nav row (icons + radial) for Home, Physical, Offensive, Defensive, Mental */}
       <RadialTabs
         activeTab={activeTab}
         onChangeTab={setActiveTab}
         averages={averages}
       />
 
-      {/** 3) Scrollable content below the radial nav */}
+      {/** 4) Scrollable content below the radial nav */}
       <div className="flex-1 overflow-auto px-4 pb-8 mt-4">
         {/** HOME (Dashboard) */}
         {activeTab === 'home' && (
-          <HomeSection player={player} />
+          <HomeSection player={selectedAthlete} />
         )}
 
         {/** PHYSICAL */}
         {activeTab === 'physical' && (
           <CategorySection
             title="Physical Attributes"
-            skills={categories.physical}
-            player={player}
+            skills={getCategoryData(selectedAthlete).physical}
+            player={selectedAthlete}
           />
         )}
 
@@ -2953,8 +2520,8 @@ function App() {
         {activeTab === 'offensive' && (
           <>
             <OffensiveSection
-              offensiveData={categories.offensive}
-              player={player}
+              offensiveData={getCategoryData(selectedAthlete).offensive}
+              player={selectedAthlete}
             />
             {/* Example: A Throw Comparison Radar Chart */}
             <div className="mt-6">
@@ -2970,8 +2537,8 @@ function App() {
         {activeTab === 'defensive' && (
           <CategorySection
             title="Defensive Skills"
-            skills={categories.defensive}
-            player={player}
+            skills={getCategoryData(selectedAthlete).defensive}
+            player={selectedAthlete}
           />
         )}
 
@@ -2979,8 +2546,8 @@ function App() {
         {activeTab === 'mental' && (
           <CategorySection
             title="Mental & Recovery"
-            skills={categories.mental}
-            player={player}
+            skills={getCategoryData(selectedAthlete).mental}
+            player={selectedAthlete}
           />
         )}
       </div>
@@ -3002,6 +2569,92 @@ test('renders learn react link', () => {
   const linkElement = screen.getByText(/learn react/i);
   expect(linkElement).toBeInTheDocument();
 });
+
+
+File: src\components\AthleteDropdown.jsx
+================================================================================
+
+// src/components/AthleteDropdown.jsx
+
+import React, { useState, useRef, useEffect } from 'react';
+import { ChevronDown } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+
+const AthleteDropdown = ({ athletes, selectedAthleteId, onSelectAthlete }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef();
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(event.target)
+      ) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
+
+  // Get the selected athlete's name
+  const selectedAthlete = athletes.find(a => a.id === selectedAthleteId);
+
+  return (
+    <div className="absolute top-4 right-4 md:top-6 md:right-6" ref={dropdownRef}>
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="flex items-center bg-gray-800 text-gray-300 hover:bg-gray-700 px-3 py-2 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500"
+        aria-haspopup="listbox"
+        aria-expanded={isOpen}
+      >
+        <span className="mr-2 text-sm">{selectedAthlete ? selectedAthlete.name : "Select Athlete"}</span>
+        <ChevronDown className="w-4 h-4" aria-hidden="true" />
+      </button>
+
+      <AnimatePresence>
+        {isOpen && (
+          <motion.div
+            className="mt-2 w-48 bg-gray-800 rounded-md shadow-lg z-30"
+            role="listbox"
+            aria-labelledby="athlete-dropdown"
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            transition={{ duration: 0.2 }}
+          >
+            <ul className="py-1">
+              {athletes.map(athlete => (
+                <li key={athlete.id}>
+                  <button
+                    onClick={() => {
+                      onSelectAthlete(athlete.id);
+                      setIsOpen(false);
+                    }}
+                    className={`w-full text-left px-4 py-2 text-sm ${
+                      athlete.id === selectedAthleteId
+                        ? 'bg-gray-700 text-white'
+                        : 'text-gray-300 hover:bg-gray-700 hover:text-white'
+                    }`}
+                    role="option"
+                    aria-selected={athlete.id === selectedAthleteId}
+                  >
+                    {athlete.name}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+};
+
+export default AthleteDropdown;
 
 
 File: src\components\CategorySection.jsx
@@ -3030,119 +2683,6 @@ const CategorySection = ({ title, skills, player }) => {
 };
 
 export default CategorySection;
-
-
-File: src\components\HomeSection.jsx
-================================================================================
-
-// src/components/HomeSection.jsx
-
-import React, { useEffect, useState } from 'react';
-import InsightsSection from './InsightsSection';
-import { Radar } from 'react-chartjs-2';
-import {
-  Chart as ChartJS,
-  RadialLinearScale,
-  PointElement,
-  LineElement,
-  Filler,
-  Tooltip,
-  Legend,
-} from 'chart.js';
-
-ChartJS.register(
-  RadialLinearScale,
-  PointElement,
-  LineElement,
-  Filler,
-  Tooltip,
-  Legend
-);
-
-function HomeSection({ player, averages }) {
-  // Optionally, store chart data in local state
-  const [radarData, setRadarData] = useState(null);
-
-  useEffect(() => {
-    // Construct the data for the radar chart
-    const labels = ['Mental', 'Physical', 'Cutting', 'Throwing', 'Defense', 'Handling'];
-    const values = [
-      averages.mental,
-      averages.physical,
-      averages.cutting,
-      averages.throwing,
-      averages.defense,
-      averages.handling,
-    ];
-
-    const newData = {
-      labels,
-      datasets: [
-        {
-          label: 'Category Averages',
-          data: values,
-          backgroundColor: 'rgba(16, 185, 129, 0.2)', // emerald-500 at 20% opacity
-          borderColor: 'rgba(16, 185, 129, 1)',        // emerald-500
-          borderWidth: 2,
-          pointBackgroundColor: 'rgba(16, 185, 129, 1)',
-        },
-      ],
-    };
-    setRadarData(newData);
-  }, [averages]);
-
-  const radarOptions = {
-    scales: {
-      r: {
-        beginAtZero: true,
-        max: 10,
-        ticks: {
-          color: '#e2e8f0', // text-gray-200
-          backdropColor: 'transparent',
-        },
-        grid: {
-          color: '#4b5563', // text-gray-600
-        },
-        angleLines: {
-          color: '#4b5563', // text-gray-600
-        },
-        pointLabels: {
-          color: '#e2e8f0', // text-gray-200
-        },
-      },
-    },
-    plugins: {
-      legend: {
-        labels: {
-          color: '#e2e8f0', // text-gray-200
-        },
-      },
-    },
-    responsive: true,
-    maintainAspectRatio: false,
-  };
-
-  return (
-    <div className="space-y-6">
-      {/* 1) Key Insights */}
-      <InsightsSection player={player} />
-
-      {/* 2) Radar Chart */}
-      <div className="bg-gray-800 rounded-lg p-4 shadow-md">
-        <h2 className="text-lg font-semibold text-gray-100 mb-3">
-          Overall Averages
-        </h2>
-        <div className="w-full h-64">
-          {radarData && (
-            <Radar data={radarData} options={radarOptions} />
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-export default HomeSection;
 
 
 File: src\components\InsightsSection.jsx
@@ -3363,11 +2903,42 @@ File: src\components\ProfileHeader.jsx
 
 // src/components/ProfileHeader.jsx
 
-import React from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import OverallScoreRing from './OverallScoreRing';
-import backgroundImage from '../assets/background.jpg'; // Ensure the path is correct
+import backgroundImage from '../assets/background.jpg'; // Ensure this path is correct
+import { ChevronDown } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { useNavigate } from 'react-router-dom'; // Import useNavigate
 
-const ProfileHeader = ({ name, email, overallScore }) => {
+const ProfileHeader = ({ name, email, overallScore, athletes, selectedAthleteId, onSelectAthlete }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef();
+  const navigate = useNavigate(); // Hook to navigate
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
+
+  // Find the selected athlete
+  const selectedAthlete = athletes.find(a => a.id === selectedAthleteId);
+
+  if (!selectedAthlete) {
+    return (
+      <div className="text-center text-gray-300 py-10">
+        Loading athlete data...
+      </div>
+    );
+  }
+
   return (
     <div className="relative w-full h-56 md:h-64 lg:h-72 bg-gray-800 rounded-lg overflow-hidden">
       {/* Background Image */}
@@ -3378,6 +2949,7 @@ const ProfileHeader = ({ name, email, overallScore }) => {
       />
       {/* Overlay */}
       <div className="absolute inset-0 bg-black bg-opacity-40"></div>
+
       {/* Content */}
       <div className="relative z-10 flex flex-col items-center justify-center h-full px-4">
         {/* User Info */}
@@ -3385,10 +2957,55 @@ const ProfileHeader = ({ name, email, overallScore }) => {
           <h1 className="text-2xl md:text-3xl font-semibold text-white">{name}</h1>
           <p className="text-sm md:text-base text-gray-300 mt-1">{email}</p>
         </div>
+
         {/* Overall Score Ring */}
         <div className="mt-4">
           <OverallScoreRing overallScore={overallScore} />
         </div>
+      </div>
+
+      {/* Dropdown (Top-right corner) */}
+      <div ref={dropdownRef} className="absolute top-4 right-4 md:top-6 md:right-6 z-30">
+        <div
+          onClick={() => setIsOpen(!isOpen)}
+          className="cursor-pointer p-2 rounded-full hover:bg-gray-700 transition"
+        >
+          <ChevronDown className="w-6 h-6 text-white" />
+        </div>
+
+        <AnimatePresence>
+          {isOpen && (
+            <motion.div
+              className="mt-2 w-48 bg-gray-800 rounded-md shadow-xl z-50"
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              transition={{ duration: 0.2 }}
+            >
+              <ul className="py-1">
+                {athletes.map((athlete) => (
+                  <li key={athlete.id}>
+                    <button
+                      onClick={() => {
+                        onSelectAthlete(athlete.id);
+                        // Update the URL with both id and name
+                        navigate(`/?id=${athlete.id}&name=${encodeURIComponent(athlete.name)}`);
+                        setIsOpen(false);
+                      }}
+                      className={`w-full text-left px-4 py-2 text-sm ${
+                        athlete.id === selectedAthleteId
+                          ? 'bg-gray-700 text-white'
+                          : 'text-gray-300 hover:bg-gray-700 hover:text-white'
+                      }`}
+                    >
+                      {athlete.name}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </div>
   );
@@ -3400,7 +3017,7 @@ export default ProfileHeader;
 File: src\components\RadarChart.jsx
 ================================================================================
 
-// src/components/RadarChart.jsx
+/* src/components/RadarChart.jsx */
 
 import React from 'react';
 import { Radar } from 'react-chartjs-2';
@@ -3423,54 +3040,108 @@ ChartJS.register(
   Legend
 );
 
-const RadarChart = ({ labels, dataValues }) => {
+/**
+ * RadarChart Component
+ * @param {Object} props - Component props
+ * @param {Array} props.labels - Labels for the radar chart axes
+ * @param {Array} props.dataValues - Data values for each axis
+ * @param {Function} props.onDataPointClick - Callback when a data point is clicked
+ */
+const RadarChart = ({ labels, dataValues, onDataPointClick }) => {
   const data = {
     labels,
     datasets: [
       {
-        label: 'Throw Ratings',
+        label: 'Category Scores',
         data: dataValues,
-        backgroundColor: 'rgba(16, 185, 129, 0.2)',  // emerald-500 @ 20%
-        borderColor: 'rgba(16, 185, 129, 1)',         // emerald-500
+        backgroundColor: 'rgba(16, 185, 129, 0.2)',
+        borderColor: 'rgba(16, 185, 129, 1)',
         borderWidth: 2,
         pointBackgroundColor: 'rgba(16, 185, 129, 1)',
+        pointBorderColor: '#fff',
+        pointHoverBackgroundColor: '#fff',
+        pointHoverBorderColor: 'rgba(16, 185, 129, 1)',
+        pointRadius: 3, // Reduced from 5 to 3
+        pointHoverRadius: 7, // Kept or adjusted as needed
+        pointHitRadius: 10, // Maintained for consistent touch area
       },
     ],
   };
 
   const options = {
+    responsive: true,
+    maintainAspectRatio: false, // Allows the chart to fill the container
     scales: {
       r: {
         beginAtZero: true,
         max: 10,
         ticks: {
-          color: '#e2e8f0',   // text-gray-200
+          stepSize: 2,
+          display: false,
           backdropColor: 'transparent',
         },
         grid: {
-          color: '#4b5563',   // text-gray-600
+          color: '#4b5563',
+          lineWidth: 1,
         },
         angleLines: {
-          color: '#4b5563',   // text-gray-600
+          color: '#4b5563',
+          lineWidth: 1,
         },
         pointLabels: {
-          color: '#e2e8f0',   // text-gray-200
+          color: '#e2e8f0',
+          font: {
+            size: 11,
+            family: 'Inter',
+          },
+          padding: 8,
         },
       },
     },
     plugins: {
       legend: {
-        labels: {
-          color: '#e2e8f0',  // text-gray-200
+        display: false,
+      },
+      tooltip: {
+        enabled: true,
+        backgroundColor: 'rgba(17, 24, 39, 0.95)',
+        padding: 8,
+        titleFont: {
+          size: 12,
+          family: 'Inter',
+        },
+        bodyFont: {
+          size: 11,
+          family: 'Inter',
+        },
+        displayColors: false,
+        callbacks: {
+          title: (items) => labels[items[0].dataIndex],
+          label: (item) => `${item.formattedValue}/10`,
         },
       },
     },
-    responsive: true,
-    maintainAspectRatio: false,
+    onClick: (event, elements) => {
+      if (elements.length > 0 && onDataPointClick) {
+        const { index, datasetIndex } = elements[0];
+        const label = labels[index];
+        const value = dataValues[index];
+        onDataPointClick({ label, value, index, datasetIndex });
+      }
+    },
+    // Optional: Change cursor to pointer on hover
+    onHover: (event, elements) => {
+      const target = event.native.target;
+      if (elements.length > 0) {
+        target.style.cursor = 'pointer';
+      } else {
+        target.style.cursor = 'default';
+      }
+    },
   };
 
   return (
-    <div className="w-full max-w-md mx-auto h-64">
+    <div className="w-full h-full">
       <Radar data={data} options={options} />
     </div>
   );
@@ -3695,6 +3366,188 @@ const SkillCard = ({ label, value }) => {
 export default SkillCard;
 
 
+File: src\components\SwipeableInsights.jsx
+================================================================================
+
+import React, { useState, useEffect } from 'react';
+import { motion, AnimatePresence, useAnimation } from 'framer-motion';
+
+const SWIPE_THRESHOLD = 30;
+const VELOCITY_THRESHOLD = 200;
+
+const InsightsCard = ({ title, data, subtitle }) => (
+  <div className="bg-gray-800 p-4 rounded-lg shadow-md w-full">
+    <div className="text-gray-300 text-xs font-bold uppercase tracking-widest mb-2">
+      <span className="font-semibold text-emerald-400">{title}</span>
+      {subtitle && (
+        <span className="block text-gray-400 text-xs mt-1 normal-case">
+          {subtitle}
+        </span>
+      )}
+    </div>
+    {data.map(([skillKey, skillValue], index) => (
+      <div key={index} className="flex justify-between mb-1">
+        <span className="capitalize text-gray-200">
+          {skillKey.replace(/_/g, ' ')}
+        </span>
+        <span className="text-emerald-400 font-semibold">
+          {skillValue}/10
+        </span>
+      </div>
+    ))}
+  </div>
+);
+
+const SwipeableInsights = ({ player }) => {
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
+  const controls = useAnimation();
+  const [containerWidth, setContainerWidth] = useState(0);
+
+  // Mock growth targets - in a real app, this would come from user data
+  const growthTargets = [
+    ['laying_out', player.laying_out],
+    ['endurance', player.endurance],
+    ['vertical_leap', player.vertical_leap]
+  ];
+
+  useEffect(() => {
+    const updateWidth = () => {
+      const container = document.querySelector('.insights-container');
+      if (container) {
+        setContainerWidth(container.offsetWidth);
+      }
+    };
+    
+    updateWidth();
+    window.addEventListener('resize', updateWidth);
+    return () => window.removeEventListener('resize', updateWidth);
+  }, []);
+
+  const getSortedSkills = () => {
+    const skillEntries = Object.entries(player).filter(([key, val]) => 
+      typeof val === 'number'
+    );
+    return skillEntries.sort((a, b) => b[1] - a[1]);
+  };
+
+  const cards = [
+    {
+      title: 'Current Growth Targets',
+      data: growthTargets
+    },
+    {
+      title: 'Top 3 Strengths',
+      data: getSortedSkills().slice(0, 3)
+    },
+    {
+      title: 'Areas for Improvement',
+      data: getSortedSkills().reverse().slice(0, 3)
+    }
+  ];
+
+  const snapToIndex = (index) => {
+    controls.start({
+      x: -index * containerWidth,
+      transition: {
+        type: "spring",
+        stiffness: 400,
+        damping: 40,
+        mass: 0.8,
+        restSpeed: 0.5,
+        restDelta: 0.5
+      }
+    }).then(() => {
+      setIsDragging(false);
+    });
+  };
+
+  const handleDragStart = () => {
+    setIsDragging(true);
+  };
+
+  const handleDragEnd = (event, info) => {
+    const swipe = info.offset.x;
+    const velocity = info.velocity.x;
+    
+    const shouldSwipe = Math.abs(swipe) > SWIPE_THRESHOLD || Math.abs(velocity) > VELOCITY_THRESHOLD;
+    
+    if (shouldSwipe) {
+      const direction = swipe > 0 ? -1 : 1;
+      const nextIndex = currentIndex + direction;
+      
+      if (nextIndex >= 0 && nextIndex < cards.length) {
+        setCurrentIndex(nextIndex);
+        snapToIndex(nextIndex);
+      } else {
+        snapToIndex(currentIndex);
+      }
+    } else {
+      snapToIndex(currentIndex);
+    }
+  };
+
+  const handleDotClick = (index) => {
+    if (!isDragging) {
+      setCurrentIndex(index);
+      snapToIndex(index);
+    }
+  };
+
+  return (
+    <div className="mb-6">
+      <h2 className="text-xl font-bold uppercase mb-3 text-gray-100">
+        Key Insights
+      </h2>
+      
+      <div className="relative insights-container overflow-hidden bg-gray-800 rounded-lg shadow-md">
+        <motion.div
+          className="flex"
+          style={{ width: `${cards.length * 100}%` }}
+          drag="x"
+          dragConstraints={{
+            left: -containerWidth * (cards.length - 1),
+            right: 0
+          }}
+          dragElastic={0.1}
+          dragMomentum={false}
+          onDragStart={handleDragStart}
+          onDragEnd={handleDragEnd}
+          animate={controls}
+          initial={{ x: 0 }}
+        >
+          {cards.map((card, index) => (
+            <div
+              key={index}
+              style={{ width: containerWidth }}
+            >
+              <InsightsCard {...card} />
+            </div>
+          ))}
+        </motion.div>
+      </div>
+
+      {/* Navigation Dots */}
+      <div className="flex justify-center mt-4 space-x-3">
+        {cards.map((_, index) => (
+          <button
+            key={index}
+            onClick={() => handleDotClick(index)}
+            className={`w-2 h-2 rounded-full transition-all duration-200 ${
+              index === currentIndex 
+                ? 'bg-emerald-400 scale-110' 
+                : 'bg-gray-600 hover:bg-gray-500'
+            }`}
+            disabled={isDragging}
+          />
+        ))}
+      </div>
+    </div>
+  );
+};
+
+export default SwipeableInsights;
+
 File: src\components\Tabs.jsx
 ================================================================================
 
@@ -3797,78 +3650,149 @@ File: src\data\mockData.js
 // src/data/mockData.js
 
 const mockData = [
-    {
-      name: "Jonathan Mast",
-      email: "jon1mast@gmail.com",
-      speed_explosiveness: 4,
-      endurance: 3,
-      vertical_leap: 3,
-      change_of_direction: 5,
-      boxing_out: 7,
-      laying_out: 1,
-      recovery: 6,
-      flexibility_mobility: 7,
-      injury_prevention: 4,
-      defensive_strategy: 7,
-      offensive_strategy: 9,
-      mental_game: 9,
-      feedback_implementation: 10,
-      isolation_cutting: 3,
-      continuation_cutting: 4,
-      angles: 6,
-      fakes_footwork: 5,
-      timing_field_vision: 6,
-      decisiveness: 5,
-      catching: 9,
-      zone_offense: 8,
-      reading_the_disc: 9,
-      normal_marking: 8,
-      sideline_trap_marking: 9,
-      downfield_defending: 4,
-      handler_defending: 6,
-      defensive_pattern_recognition: 6,
-      help_defense: 8,
-      switching_on_defense: 8,
-      zone_defense: 6,
-      defensive_mental_fortitude: 4,
-      handler_movement: 10,
-      poise_with_disc: 10,
-      breaking_the_mark: 9,
-      resetting_from_trap_sideline: 9,
-      decision_making_vision: 8,
-      flow_awareness: 9,
-      throw_and_go: 8,
-      offensive_pattern_recognition: 9,
-      backhand_power: 9,
-      backhand_accuracy: 9,
-      backhand_quick_release: 9,
-      backhand_release_variations: 9,
-      backhand_against_wind: 8,
-      backhand_against_difficult_marks: 9,
-      backhand_tempo_control: 9,
-      forehand_power: 8,
-      forehand_accuracy: 9,
-      forehand_quick_release: 10,
-      forehand_release_variations: 10,
-      forehand_against_wind: 8,
-      forehand_against_difficult_marks: 10,
-      forehand_tempo_control: 10,
-      specialty_power: 8,
-      specialty_accuracy: 8,
-      specialty_quick_release: 8,
-      specialty_release_variations: 10,
-      specialty_against_wind: 6,
-      specialty_against_difficult_marks: 8,
-      specialty_tempo_control: 8,
-      hucking_confidence: 7,
-      hucking_shape_control: 7,
-      hucking_tempo_control: 7,
-      hucking_placement: 9
-    },
-  ];
-  
-  export default mockData;
-  
+  {
+    id: 1, // Unique identifier for each athlete
+    name: "Jonathan Mast",
+    email: "jon1mast@gmail.com",
+    speed_explosiveness: 4,
+    endurance: 3,
+    vertical_leap: 3,
+    change_of_direction: 5,
+    boxing_out: 7,
+    laying_out: 1,
+    recovery: 6,
+    flexibility_mobility: 7,
+    injury_prevention: 4,
+    defensive_strategy: 7,
+    offensive_strategy: 9,
+    mental_game: 9,
+    feedback_implementation: 10,
+    isolation_cutting: 3,
+    continuation_cutting: 4,
+    angles: 6,
+    fakes_footwork: 5,
+    timing_field_vision: 6,
+    decisiveness: 5,
+    catching: 9,
+    zone_offense: 8,
+    reading_the_disc: 9,
+    normal_marking: 8,
+    sideline_trap_marking: 9,
+    downfield_defending: 4,
+    handler_defending: 6,
+    defensive_pattern_recognition: 6,
+    help_defense: 8,
+    switching_on_defense: 8,
+    zone_defense: 6,
+    defensive_mental_fortitude: 4,
+    handler_movement: 10,
+    poise_with_disc: 10,
+    breaking_the_mark: 9,
+    resetting_from_trap_sideline: 9,
+    decision_making_vision: 8,
+    flow_awareness: 9,
+    throw_and_go: 8,
+    offensive_pattern_recognition: 9,
+    backhand_power: 9,
+    backhand_accuracy: 9,
+    backhand_quick_release: 9,
+    backhand_release_variations: 9,
+    backhand_against_wind: 8,
+    backhand_against_difficult_marks: 9,
+    backhand_tempo_control: 9,
+    forehand_power: 8,
+    forehand_accuracy: 9,
+    forehand_quick_release: 10,
+    forehand_release_variations: 10,
+    forehand_against_wind: 8,
+    forehand_against_difficult_marks: 10,
+    forehand_tempo_control: 10,
+    specialty_power: 8,
+    specialty_accuracy: 8,
+    specialty_quick_release: 8,
+    specialty_release_variations: 10,
+    specialty_against_wind: 6,
+    specialty_against_difficult_marks: 8,
+    specialty_tempo_control: 8,
+    hucking_confidence: 7,
+    hucking_shape_control: 7,
+    hucking_tempo_control: 7,
+    hucking_placement: 9
+  },
+  {
+    id: 2,
+    name: "Emily Clark",
+    email: "emily.clark@example.com",
+    speed_explosiveness: 7,
+    endurance: 8,
+    vertical_leap: 6,
+    change_of_direction: 7,
+    boxing_out: 5,
+    laying_out: 4,
+    recovery: 7,
+    flexibility_mobility: 8,
+    injury_prevention: 6,
+    defensive_strategy: 8,
+    offensive_strategy: 7,
+    mental_game: 8,
+    feedback_implementation: 9,
+    isolation_cutting: 6,
+    continuation_cutting: 7,
+    angles: 7,
+    fakes_footwork: 8,
+    timing_field_vision: 7,
+    decisiveness: 8,
+    catching: 7,
+    zone_offense: 6,
+    reading_the_disc: 8,
+    normal_marking: 7,
+    sideline_trap_marking: 6,
+    downfield_defending: 7,
+    handler_defending: 7,
+    defensive_pattern_recognition: 7,
+    help_defense: 7,
+    switching_on_defense: 7,
+    zone_defense: 7,
+    defensive_mental_fortitude: 7,
+    handler_movement: 8,
+    poise_with_disc: 8,
+    breaking_the_mark: 7,
+    resetting_from_trap_sideline: 7,
+    decision_making_vision: 7,
+    flow_awareness: 7,
+    throw_and_go: 7,
+    offensive_pattern_recognition: 7,
+    backhand_power: 7,
+    backhand_accuracy: 7,
+    backhand_quick_release: 7,
+    backhand_release_variations: 7,
+    backhand_against_wind: 7,
+    backhand_against_difficult_marks: 7,
+    backhand_tempo_control: 7,
+    forehand_power: 7,
+    forehand_accuracy: 7,
+    forehand_quick_release: 7,
+    forehand_release_variations: 7,
+    forehand_against_wind: 7,
+    forehand_against_difficult_marks: 7,
+    forehand_tempo_control: 7,
+    specialty_power: 7,
+    specialty_accuracy: 7,
+    specialty_quick_release: 7,
+    specialty_release_variations: 7,
+    specialty_against_wind: 7,
+    specialty_against_difficult_marks: 7,
+    specialty_tempo_control: 7,
+    hucking_confidence: 7,
+    hucking_shape_control: 7,
+    hucking_tempo_control: 7,
+    hucking_placement: 7
+  },
+  // Add more athletes as needed
+];
+
+export default mockData;
+
 
 File: src\index.css
 ================================================================================
@@ -3886,18 +3810,21 @@ body {
 File: src\index.js
 ================================================================================
 
-// index.js
+// src/index.js
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import './index.css';
-import App from './App';
+import App from './App.jsx';
+import { BrowserRouter } from 'react-router-dom'; // Import BrowserRouter
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(
   <React.StrictMode>
-    <div className="dark">  {/* <-- Force dark mode */}
-      <App />
-    </div>
+    <BrowserRouter> {/* Wrap App with BrowserRouter */}
+      <div className="dark">  {/* <-- Force dark mode */}
+        <App />
+      </div>
+    </BrowserRouter>
   </React.StrictMode>
 );
 
@@ -3928,5 +3855,20 @@ File: src\setupTests.js
 // expect(element).toHaveTextContent(/react/i)
 // learn more: https://github.com/testing-library/jest-dom
 import '@testing-library/jest-dom';
+
+
+File: src\utils\slugify.js
+================================================================================
+
+// src/utils/slugify.js
+import slugify from 'slugify';
+
+export const createAthleteSlug = (name) => {
+  return slugify(name, {
+    lower: true,       // Convert to lowercase
+    strict: true,      // Remove special characters
+    remove: /[*+~.()'"!:@]/g, // Additional character removal if needed
+  });
+};
 
 

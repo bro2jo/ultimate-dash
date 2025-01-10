@@ -1,3 +1,5 @@
+/* src/components/RadarChart.jsx */
+
 import React from 'react';
 import { Radar } from 'react-chartjs-2';
 import {
@@ -19,11 +21,19 @@ ChartJS.register(
   Legend
 );
 
-const RadarChart = ({ labels, dataValues }) => {
+/**
+ * RadarChart Component
+ * @param {Object} props - Component props
+ * @param {Array} props.labels - Labels for the radar chart axes
+ * @param {Array} props.dataValues - Data values for each axis
+ * @param {Function} props.onDataPointClick - Callback when a data point is clicked
+ */
+const RadarChart = ({ labels, dataValues, onDataPointClick }) => {
   const data = {
     labels,
     datasets: [
       {
+        label: 'Category Scores',
         data: dataValues,
         backgroundColor: 'rgba(16, 185, 129, 0.2)',
         borderColor: 'rgba(16, 185, 129, 1)',
@@ -32,13 +42,16 @@ const RadarChart = ({ labels, dataValues }) => {
         pointBorderColor: '#fff',
         pointHoverBackgroundColor: '#fff',
         pointHoverBorderColor: 'rgba(16, 185, 129, 1)',
-        pointRadius: 2.5,
-        pointHoverRadius: 4,
+        pointRadius: 3, // Reduced from 5 to 3
+        pointHoverRadius: 7, // Kept or adjusted as needed
+        pointHitRadius: 10, // Maintained for consistent touch area
       },
     ],
   };
 
   const options = {
+    responsive: true,
+    maintainAspectRatio: false, // Allows the chart to fill the container
     scales: {
       r: {
         beginAtZero: true,
@@ -85,17 +98,31 @@ const RadarChart = ({ labels, dataValues }) => {
         displayColors: false,
         callbacks: {
           title: (items) => labels[items[0].dataIndex],
-          label: (item) => `${item.formattedValue}/10`
+          label: (item) => `${item.formattedValue}/10`,
         },
       },
     },
-    responsive: true,
-    maintainAspectRatio: true,
-    aspectRatio: 1.2, // This controls the aspect ratio of the chart
+    onClick: (event, elements) => {
+      if (elements.length > 0 && onDataPointClick) {
+        const { index, datasetIndex } = elements[0];
+        const label = labels[index];
+        const value = dataValues[index];
+        onDataPointClick({ label, value, index, datasetIndex });
+      }
+    },
+    // Optional: Change cursor to pointer on hover
+    onHover: (event, elements) => {
+      const target = event.native.target;
+      if (elements.length > 0) {
+        target.style.cursor = 'pointer';
+      } else {
+        target.style.cursor = 'default';
+      }
+    },
   };
 
   return (
-    <div className="w-full aspect-[1.2]"> {/* Match the aspectRatio from options */}
+    <div className="w-full h-full">
       <Radar data={data} options={options} />
     </div>
   );
