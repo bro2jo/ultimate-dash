@@ -18,7 +18,7 @@ export function InstallPrompt() {
 
   return (
     <div className="fixed bottom-4 left-4 right-4 bg-gray-800 p-4 rounded-lg shadow-lg">
-      <p className="text-gray-100 mb-2">Install Ultimate Performance Tracker?</p>
+      <p className="text-gray-100 mb-2">Install Ultify Performance Tracker?</p>
       <div className="flex space-x-2">
         <button
           onClick={() => installPrompt.prompt()}

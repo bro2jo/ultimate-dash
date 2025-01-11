@@ -1,6 +1,6 @@
 {
-  "name": "Ultimate Performance Tracker",
-  "short_name": "UltPerf",
+  "name": "Ultify Performance Tracker",
+  "short_name": "Ultify",
   "description": "Track and analyze Ultimate Frisbee player performance metrics",
   "start_url": "/",
   "display": "standalone",
