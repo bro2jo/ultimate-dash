@@ -34,6 +34,16 @@
   z-index: 9999; /* Always on top */
 }
 
+.fixed-dropdown-wrapper {
+  position: relative;
+  z-index: 9999;
+}
+
+/* Ensure the dropdown menu is always on top */
+.fixed-dropdown-wrapper [role="listbox"] {
+  z-index: 9999;
+}
+
 .App-link {
   color: #61dafb;
 }

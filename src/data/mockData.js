@@ -11,6 +11,11 @@ const mockData = [
       referrer: "https://ultimate-assessment.netlify.app/",
       created_at: "2025-01-09T14:18:32.150Z",
     },
+    growth_targets: [
+      'change_of_direction',
+      'defensive_pattern_recognition',
+      'decision_making_vision'
+    ],
     skills: {
       speed_explosiveness: 7,
       endurance: 8,
@@ -88,6 +93,11 @@ const mockData = [
       referrer: "https://ultimate-assessment.netlify.app/",
       created_at: "2025-01-09T14:13:29.628Z",
     },
+    growth_targets: [
+      'defensive_pattern_recognition',
+      'breaking_the_mark',
+      'hucking_confidence'
+    ],
     skills: {
       speed_explosiveness: 7,
       endurance: 7,
@@ -165,6 +175,11 @@ const mockData = [
       referrer: "https://ultimate-assessment.netlify.app/",
       created_at: "2025-01-07T22:04:37.985Z",
     },
+    growth_targets: [
+      'speed_explosiveness',
+      'defensive_mental_fortitude',
+      'continuation_cutting'
+    ],
     skills: {
       speed_explosiveness: 6,
       endurance: 8,
@@ -242,6 +257,11 @@ const mockData = [
       referrer: "https://ultimate-assessment.netlify.app/",
       created_at: "2025-01-07T02:07:01.581Z",
     },
+    growth_targets: [
+      'breaking_the_mark',
+      'endurance',
+      'handler_movement'
+    ],
     skills: {
       speed_explosiveness: 7,
       endurance: 6,
@@ -319,6 +339,11 @@ const mockData = [
       referrer: "https://ultimate-assessment.netlify.app/",
       created_at: "2025-01-07T01:55:25.039Z",
     },
+    growth_targets: [
+      'hucking_confidence',
+      'handler_movement',
+      'breaking_the_mark'
+    ],
     skills: {
       speed_explosiveness: 8,
       endurance: 8,
@@ -396,6 +421,11 @@ const mockData = [
       referrer: "https://ultimate-assessment.netlify.app/",
       created_at: "2025-01-06T23:35:25.293Z",
     },
+    growth_targets: [
+      'injury_prevention',
+      'breaking_the_mark',
+      'decisiveness'
+    ],
     skills: {
       speed_explosiveness: 9,
       endurance: 5,
@@ -473,6 +503,11 @@ const mockData = [
       referrer: "https://ultimate-assessment.netlify.app/",
       created_at: "2025-01-06T23:28:51.361Z",
     },
+    growth_targets: [
+      'endurance',
+      'speed_explosiveness',
+      'decisiveness'
+    ],
     skills: {
       speed_explosiveness: 4,
       endurance: 3,

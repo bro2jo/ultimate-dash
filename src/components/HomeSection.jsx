@@ -35,8 +35,10 @@ function HomeSection({ player }) { // player is the full athlete object
   return (
     <div className="mx-auto space-y-4">
       {/* Key Insights (Top 3 strengths, etc.) */}
-      <SwipeableInsights player={player.skills} />
-
+      <SwipeableInsights 
+  player={player} 
+  growthTargets={player.growth_targets || []}
+/>
       {/* Radar Chart for 6 main categories */}
       <div className="bg-gray-800 p-5 rounded-lg shadow-md">
         <h2 className="text-lg font-semibold text-gray-100 mb-4 mt-0">

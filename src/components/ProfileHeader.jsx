@@ -58,7 +58,7 @@ const ProfileHeader = ({
   };
 
   return (
-    <div className="relative w-full h-56 md:h-64 lg:h-72 bg-gray-800 rounded-lg overflow-hidden">
+    <div className="relative w-full h-56 md:h-64 lg:h-72 bg-gray-800 rounded-lg">
       {/* Background Image */}
       <img
         src={backgroundImage}
@@ -79,9 +79,12 @@ const ProfileHeader = ({
         </div>
       </div>
 
-      {/* Dropdown Container */}
-      <div ref={dropdownRef} className="absolute top-4 right-4 md:top-6 md:right-6 z-50">
-        {/* Toggle Button */}
+      {/* Dropdown Container - Portal the dropdown menu */}
+      <div 
+        ref={dropdownRef} 
+        className="absolute top-4 right-4 md:top-6 md:right-6"
+        style={{ zIndex: 9999 }}
+      >
         <button
           onClick={() => setIsOpen(!isOpen)}
           className="flex items-center justify-center w-10 h-10 rounded-full 
@@ -100,41 +103,43 @@ const ProfileHeader = ({
           </motion.div>
         </button>
 
-        {/* Dropdown Menu */}
         <AnimatePresence>
           {isOpen && (
             <motion.div
-  initial="closed"
-  animate="open"
-  exit="closed"
-  variants={menuVariants}
-  style={{ transformOrigin: 'top' }}
-  className="absolute right-0 mt-2 w-64 bg-gray-800 rounded-lg shadow-lg 
-             ring-1 ring-black ring-opacity-5 z-50 max-h-64 overflow-y-auto"
->
-  <ul
-    id="athlete-listbox"
-    role="listbox"
-    aria-label="Select athlete"
-    className="divide-y divide-gray-700"
-  >
-    {athletes.map((athlete) => (
-      <li key={athlete.id} role="option" aria-selected={athlete.id === selectedAthleteId}>
-        <button
-          onClick={() => handleAthleteSelect(athlete)}
-          className={`w-full text-left px-4 py-3 text-sm ${
-            athlete.id === selectedAthleteId
-              ? 'bg-gray-700 text-white'
-              : 'text-gray-300 hover:bg-gray-700 hover:text-white'
-          }`}
-        >
-          {athlete.metadata.name}
-        </button>
-      </li>
-    ))}
-  </ul>
-</motion.div>
-
+              initial="closed"
+              animate="open"
+              exit="closed"
+              variants={menuVariants}
+              className="absolute right-0 mt-2 w-64 bg-gray-800 rounded-lg shadow-lg 
+                       ring-1 ring-black ring-opacity-5 max-h-[calc(100vh-120px)]"
+              style={{ 
+                zIndex: 9999,
+                transformOrigin: "top",
+                top: "calc(100% + 0.5rem)" // Position directly below button
+              }}
+            >
+              <ul
+                id="athlete-listbox"
+                role="listbox"
+                aria-label="Select athlete"
+                className="divide-y divide-gray-700 overflow-y-auto"
+              >
+                {athletes.map((athlete) => (
+                  <li key={athlete.id} role="option" aria-selected={athlete.id === selectedAthleteId}>
+                    <button
+                      onClick={() => handleAthleteSelect(athlete)}
+                      className={`w-full text-left px-4 py-3 text-sm ${
+                        athlete.id === selectedAthleteId
+                          ? 'bg-gray-700 text-white'
+                          : 'text-gray-300 hover:bg-gray-700 hover:text-white'
+                      }`}
+                    >
+                      {athlete.metadata.name}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </motion.div>
           )}
         </AnimatePresence>
       </div>
