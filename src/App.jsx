@@ -4,13 +4,14 @@ import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import mockData from './data/mockData';
 import ProfileHeader from './components/ProfileHeader';
-import SwipeableInsights from './components/SwipeableInsights';
 import CategorySection from './components/CategorySection';
 import RadarChart from './components/RadarChart';
 import OffensiveSection from './components/OffensiveSection';
 import RadialTabs from './components/RadialTabs';
 import { computeCategoryAverages, computeOverallScore } from './utils/helpers';
 import HomeSection from './components/HomeSection';  // Add this import if not already there
+import { SyncManager } from './utils/sync';
+import { InstallPrompt } from './components/InstallPrompt';
 
 import './index.css';
 
@@ -21,6 +22,8 @@ import './index.css';
 function App() {
   const location = useLocation();
   const navigate = useNavigate();
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [syncPending, setSyncPending] = useState(false);
 
   // 3.1) Manage Selected Athlete
   const [selectedAthleteId, setSelectedAthleteId] = useState(mockData[0].id);
@@ -165,11 +168,34 @@ function App() {
     selectedAthlete.skills.specialty_accuracy,
   ];
 
+  useEffect(() => {
+    const handleOnline = () => {
+      setIsOnline(true);
+      SyncManager.processSyncQueue();
+    };
+    const handleOffline = () => setIsOnline(false);
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
   /* -------------------------------------
      RENDER
   -------------------------------------- */
   return (
+    
     <div className="min-h-screen bg-gray-900 text-gray-100 flex flex-col">
+            {!isOnline && (
+        <div className="bg-yellow-600 text-white px-4 py-2 text-center">
+          You're offline. Some features may be limited.
+        </div>
+      )}
+      <InstallPrompt />
       {/** 1) Profile Header at the top */}
       <ProfileHeader
         name={selectedAthlete.metadata.name}

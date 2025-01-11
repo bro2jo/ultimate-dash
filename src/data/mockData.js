@@ -540,7 +540,7 @@ const mockData = [
       switching_on_defense: 8,
       zone_defense: 6,
       defensive_mental_fortitude: 4,
-      handler_movement: 10,
+      handler_movement: 9,
       poise_with_disc: 10,
       breaking_the_mark: 9,
       resetting_from_trap_sideline: 9,
