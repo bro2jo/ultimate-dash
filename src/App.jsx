@@ -12,6 +12,8 @@ import { computeCategoryAverages, computeOverallScore } from './utils/helpers';
 import HomeSection from './components/HomeSection';  // Add this import if not already there
 import { SyncManager } from './utils/sync';
 import { InstallPrompt } from './components/InstallPrompt';
+import RoadmapModal from './components/RoadmapModal';
+import FloatingActionButton from './components/FloatingActionButton';
 
 import './index.css';
 
@@ -24,6 +26,7 @@ function App() {
   const navigate = useNavigate();
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [syncPending, setSyncPending] = useState(false);
+  const [isRoadmapOpen, setRoadmapOpen] = useState(false);
 
   // 3.1) Manage Selected Athlete
   const [selectedAthleteId, setSelectedAthleteId] = useState(mockData[0].id);
@@ -118,7 +121,6 @@ function App() {
       },
     },
     defensive: [
-      { key: 'defensive_strategy', label: 'Defensive Strategy' },
       { key: 'normal_marking', label: 'Normal Marking' },
       { key: 'sideline_trap_marking', label: 'Sideline Trap Marking' },
       { key: 'downfield_defending', label: 'Downfield Defending' },
@@ -132,9 +134,8 @@ function App() {
     mental: [
       { key: 'mental_game', label: 'Mental Game' },
       { key: 'feedback_implementation', label: 'Feedback Implementation' },
-      { key: 'injury_prevention', label: 'Injury Prevention' },
-      { key: 'recovery', label: 'Recovery' },
-      { key: 'flexibility_mobility', label: 'Flexibility & Mobility' },
+      { key: 'defensive_strategy', label: 'Defensive Team Strategy' },
+      { key: 'offensive_strategy', label: 'Offensive Team Strategy' },
     ],
   });
 
@@ -267,6 +268,20 @@ function App() {
             player={selectedAthlete.skills}
           />
         )}
+
+        {/* Roadmap Modal */}
+        <RoadmapModal 
+        isOpen={isRoadmapOpen}
+        onClose={() => setRoadmapOpen(false)}
+        player={selectedAthlete}
+      />
+          <FloatingActionButton onClick={() => setRoadmapOpen(true)} />
+    
+    <RoadmapModal 
+      isOpen={isRoadmapOpen}
+      onClose={() => setRoadmapOpen(false)}
+      player={selectedAthlete}
+    />
       </div>
     </div>
   );

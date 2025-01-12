@@ -3,9 +3,10 @@
 import React, { useState, useEffect } from 'react';
 import RadarChart from './RadarChart';
 import SwipeableInsights from './SwipeableInsights';
+import SkillHierarchy from './SkillHierarchy';
 import { computeCategoryAverages } from '../utils/helpers';
 
-function HomeSection({ player }) { // player is the full athlete object
+function HomeSection({ player }) {
   const [averages, setAverages] = useState({
     mental: 0,
     physical: 0,
@@ -17,7 +18,7 @@ function HomeSection({ player }) { // player is the full athlete object
   });
 
   useEffect(() => {
-    const avg = computeCategoryAverages(player); // Now accesses player.skills
+    const avg = computeCategoryAverages(player);
     setAverages(avg);
   }, [player]);
 
@@ -33,23 +34,46 @@ function HomeSection({ player }) { // player is the full athlete object
   ];
 
   return (
-    <div className="mx-auto space-y-4">
+    <div className="mx-auto space-y-6">
       {/* Key Insights (Top 3 strengths, etc.) */}
       <SwipeableInsights 
-  player={player} 
-  growthTargets={player.growth_targets || []}
-/>
-      {/* Radar Chart for 6 main categories */}
-      <div className="bg-gray-800 p-5 rounded-lg shadow-md">
-        <h2 className="text-lg font-semibold text-gray-100 mb-4 mt-0">
-          Category Averages
-        </h2>
-        {/* Center the RadarChart */}
-        <div className="w-full flex justify-center">
-          <div className="w-80 h-80">
-            <RadarChart labels={radarLabels} dataValues={radarDataValues} />
+        player={player} 
+        growthTargets={player.growth_targets || []}
+      />
+
+      {/* Main Stats Section */}
+      <div className="grid gap-6 grid-cols-1 lg:grid-cols-2">
+        {/* Radar Chart */}
+        <div className="bg-gray-800 p-5 rounded-lg shadow-md">
+          <h2 className="text-lg font-semibold text-gray-100 mb-4 mt-0">
+            Category Averages
+          </h2>
+          <div className="w-full flex justify-center">
+            <div className="w-full aspect-square max-w-[400px]">
+              <RadarChart labels={radarLabels} dataValues={radarDataValues} />
+            </div>
           </div>
         </div>
+
+        {/* Skill Hierarchy */}
+        <div className="bg-gray-800 p-5 rounded-lg shadow-md">
+          <h2 className="text-lg font-semibold text-gray-100 mb-4 mt-0">
+            Detailed Breakdown
+          </h2>
+          <div className="overflow-auto max-h-[400px] custom-scrollbar">
+            <SkillHierarchy player={player} />
+          </div>
+        </div>
+      </div>
+
+      {/* Additional Info or Future Sections */}
+      <div className="bg-gray-800 p-5 rounded-lg shadow-md">
+        <h2 className="text-lg font-semibold text-gray-100 mb-4">
+          Recent Progress
+        </h2>
+        <p className="text-gray-400 text-sm">
+          Progress tracking section coming soon...
+        </p>
       </div>
     </div>
   );

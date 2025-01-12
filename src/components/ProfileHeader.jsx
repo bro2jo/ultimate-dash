@@ -11,7 +11,7 @@ const ProfileHeader = ({
   overallScore, 
   athletes, 
   selectedAthleteId, 
-  onSelectAthlete 
+  onSelectAthlete,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef(null);
@@ -73,7 +73,6 @@ const ProfileHeader = ({
           <h1 className="text-2xl md:text-3xl font-semibold text-white">{name}</h1>
           <p className="text-sm md:text-base text-gray-300 mt-1">{email}</p>
         </div>
-
         <div className="mt-4">
           <OverallScoreRing overallScore={overallScore} />
         </div>
@@ -85,6 +84,7 @@ const ProfileHeader = ({
         className="absolute top-4 right-4 md:top-6 md:right-6"
         style={{ zIndex: 9999 }}
       >
+        
         <button
           onClick={() => setIsOpen(!isOpen)}
           className="flex items-center justify-center w-10 h-10 rounded-full 

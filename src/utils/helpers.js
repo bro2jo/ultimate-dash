@@ -21,9 +21,9 @@ export function computeCategoryAverages(player) {
     mental: [
       'mental_game',
       'feedback_implementation',
-      'injury_prevention',
-      'recovery',
-      'flexibility_mobility',
+      'defensive_strategy',
+      'offensive_strategy',
+
     ],
     physical: [
       'speed_explosiveness',
@@ -87,7 +87,6 @@ export function computeCategoryAverages(player) {
       'hucking_placement',
     ],
     defensive: [
-      'defensive_strategy',
       'normal_marking',
       'sideline_trap_marking',
       'downfield_defending',

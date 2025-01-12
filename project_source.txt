@@ -1,6 +1,6 @@
 Project: performance-app
 Version: 0.1.0
-Generated: 2025-01-11T04:00:53.939Z
+Generated: 2025-01-12T08:00:45.920Z
 ================================================================================
 
 File: concat-files.js
@@ -172,6 +172,81 @@ module.exports = {
 }
 
 
+File: public\service-worker.js
+================================================================================
+
+const CACHE_NAME = 'ultperf-cache-v1';
+const STATIC_ASSETS = [
+  '/',
+  '/index.html',
+  '/manifest.json',
+  '/static/css/main.css',
+  '/static/js/main.js',
+  // Add paths to your key assets
+];
+
+const DATA_CACHE_NAME = 'ultperf-data-v1';
+
+// Install Service Worker
+self.addEventListener('install', (event) => {
+  event.waitUntil(
+    caches.open(CACHE_NAME).then((cache) => {
+      return cache.addAll(STATIC_ASSETS);
+    })
+  );
+  self.skipWaiting();
+});
+
+// Activate and Clean up old caches
+self.addEventListener('activate', (event) => {
+  event.waitUntil(
+    caches.keys().then((cacheNames) => {
+      return Promise.all(
+        cacheNames
+          .filter((cacheName) => {
+            return (
+              cacheName !== CACHE_NAME &&
+              cacheName !== DATA_CACHE_NAME
+            );
+          })
+          .map((cacheName) => {
+            return caches.delete(cacheName);
+          })
+      );
+    })
+  );
+  self.clients.claim();
+});
+
+// Fetch handler with network-first strategy for data, cache-first for static assets
+self.addEventListener('fetch', (event) => {
+  if (event.request.url.includes('/api/')) {
+    // Network-first strategy for API calls
+    event.respondWith(
+      fetch(event.request)
+        .then((response) => {
+          if (response.status === 200) {
+            const responseClone = response.clone();
+            caches.open(DATA_CACHE_NAME).then((cache) => {
+              cache.put(event.request, responseClone);
+            });
+          }
+          return response;
+        })
+        .catch(() => {
+          return caches.match(event.request);
+        })
+    );
+  } else {
+    // Cache-first strategy for static assets
+    event.respondWith(
+      caches.match(event.request).then((response) => {
+        return response || fetch(event.request);
+      })
+    );
+  }
+});
+
 File: README.md
 ================================================================================
 
@@ -319,66 +394,18 @@ import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import mockData from './data/mockData';
 import ProfileHeader from './components/ProfileHeader';
-import SwipeableInsights from './components/SwipeableInsights';
 import CategorySection from './components/CategorySection';
 import RadarChart from './components/RadarChart';
 import OffensiveSection from './components/OffensiveSection';
 import RadialTabs from './components/RadialTabs';
 import { computeCategoryAverages, computeOverallScore } from './utils/helpers';
+import HomeSection from './components/HomeSection';  // Add this import if not already there
+import { SyncManager } from './utils/sync';
+import { InstallPrompt } from './components/InstallPrompt';
+import RoadmapModal from './components/RoadmapModal';
+import FloatingActionButton from './components/FloatingActionButton';
 
 import './index.css';
-
-/* -------------------------------------
-   2) HOME SECTION (DASHBOARD)
--------------------------------------- */
-
-function HomeSection({ player }) { // player is the full athlete object
-  const [averages, setAverages] = useState({
-    mental: 0,
-    physical: 0,
-    cutting: 0,
-    handling: 0,
-    throwing: 0,
-    defensive: 0,
-    offensive: 0,
-  });
-
-  useEffect(() => {
-    const avg = computeCategoryAverages(player); // Accesses player.skills
-    setAverages(avg);
-  }, [player]);
-
-  // Radar chart data for 6 categories
-  const radarLabels = ['Mental', 'Physical', 'Cutting', 'Handling', 'Throwing', 'Defense'];
-  const radarDataValues = [
-    averages.mental,
-    averages.physical,
-    averages.cutting,
-    averages.handling,
-    averages.throwing,
-    averages.defensive,
-  ];
-
-  return (
-    <div className="mx-auto space-y-4">
-      {/* Key Insights (Top 3 strengths, etc.) */}
-      <SwipeableInsights player={player.skills} />
-
-      {/* Radar Chart for 6 main categories */}
-      <div className="bg-gray-800 p-5 rounded-lg shadow-md">
-        <h2 className="text-lg font-semibold text-gray-100 mb-4 mt-0">
-          Category Averages
-        </h2>
-        {/* Center the RadarChart */}
-        <div className="w-full flex justify-center">
-          <div className="w-80 h-80">
-            <RadarChart labels={radarLabels} dataValues={radarDataValues} />
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 /* -------------------------------------
    3) MAIN APP
@@ -387,6 +414,9 @@ function HomeSection({ player }) { // player is the full athlete object
 function App() {
   const location = useLocation();
   const navigate = useNavigate();
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [syncPending, setSyncPending] = useState(false);
+  const [isRoadmapOpen, setRoadmapOpen] = useState(false);
 
   // 3.1) Manage Selected Athlete
   const [selectedAthleteId, setSelectedAthleteId] = useState(mockData[0].id);
@@ -411,7 +441,6 @@ function App() {
 
   // Find the selected athlete from mockData
   const selectedAthlete = mockData.find(athlete => athlete.id === selectedAthleteId);
-
   // 3.4) Group data into categories
   const getCategoryData = (p) => ({
     physical: [
@@ -482,7 +511,6 @@ function App() {
       },
     },
     defensive: [
-      { key: 'defensive_strategy', label: 'Defensive Strategy' },
       { key: 'normal_marking', label: 'Normal Marking' },
       { key: 'sideline_trap_marking', label: 'Sideline Trap Marking' },
       { key: 'downfield_defending', label: 'Downfield Defending' },
@@ -496,9 +524,8 @@ function App() {
     mental: [
       { key: 'mental_game', label: 'Mental Game' },
       { key: 'feedback_implementation', label: 'Feedback Implementation' },
-      { key: 'injury_prevention', label: 'Injury Prevention' },
-      { key: 'recovery', label: 'Recovery' },
-      { key: 'flexibility_mobility', label: 'Flexibility & Mobility' },
+      { key: 'defensive_strategy', label: 'Defensive Team Strategy' },
+      { key: 'offensive_strategy', label: 'Offensive Team Strategy' },
     ],
   });
 
@@ -532,11 +559,34 @@ function App() {
     selectedAthlete.skills.specialty_accuracy,
   ];
 
+  useEffect(() => {
+    const handleOnline = () => {
+      setIsOnline(true);
+      SyncManager.processSyncQueue();
+    };
+    const handleOffline = () => setIsOnline(false);
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
   /* -------------------------------------
      RENDER
   -------------------------------------- */
   return (
+    
     <div className="min-h-screen bg-gray-900 text-gray-100 flex flex-col">
+            {!isOnline && (
+        <div className="bg-yellow-600 text-white px-4 py-2 text-center">
+          You're offline. Some features may be limited.
+        </div>
+      )}
+      <InstallPrompt />
       {/** 1) Profile Header at the top */}
       <ProfileHeader
         name={selectedAthlete.metadata.name}
@@ -608,6 +658,20 @@ function App() {
             player={selectedAthlete.skills}
           />
         )}
+
+        {/* Roadmap Modal */}
+        <RoadmapModal 
+        isOpen={isRoadmapOpen}
+        onClose={() => setRoadmapOpen(false)}
+        player={selectedAthlete}
+      />
+          <FloatingActionButton onClick={() => setRoadmapOpen(true)} />
+    
+    <RoadmapModal 
+      isOpen={isRoadmapOpen}
+      onClose={() => setRoadmapOpen(false)}
+      player={selectedAthlete}
+    />
       </div>
     </div>
   );
@@ -743,6 +807,55 @@ const CategorySection = ({ title, skills, player }) => {
 export default CategorySection;
 
 
+File: src\components\FloatingActionButton.jsx
+================================================================================
+
+import React, { useState } from 'react';
+import { Milestone } from 'lucide-react';
+
+const FloatingActionButton = ({ onClick }) => {
+  const [ripple, setRipple] = useState({ active: false, x: 0, y: 0 });
+
+  const handleClick = (e) => {
+    // Get click coordinates relative to button
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    // Trigger ripple
+    setRipple({ active: true, x, y });
+    
+    // Reset ripple after animation
+    setTimeout(() => setRipple({ active: false, x: 0, y: 0 }), 600);
+    
+    // Call the original onClick handler
+    onClick();
+  };
+
+  return (
+    <button
+      onClick={handleClick}
+      className="fixed bottom-6 right-6 bg-emerald-500 hover:bg-emerald-600 text-white p-3 rounded-full shadow-lg z-50 transition-colors duration-200 flex items-center justify-center overflow-hidden"
+      aria-label="View Development Path"
+    >
+      <Milestone className="w-6 h-6" />
+      {ripple.active && (
+        <span
+          className="absolute animate-ripple rounded-full bg-white/30"
+          style={{
+            left: ripple.x - 50,  // Center the 100px wide ripple
+            top: ripple.y - 50,   // Center the 100px tall ripple
+            width: '100px',
+            height: '100px',
+          }}
+        />
+      )}
+    </button>
+  );
+};
+
+export default FloatingActionButton;
+
 File: src\components\HomeSection.jsx
 ================================================================================
 
@@ -751,9 +864,10 @@ File: src\components\HomeSection.jsx
 import React, { useState, useEffect } from 'react';
 import RadarChart from './RadarChart';
 import SwipeableInsights from './SwipeableInsights';
+import SkillHierarchy from './SkillHierarchy';
 import { computeCategoryAverages } from '../utils/helpers';
 
-function HomeSection({ player }) { // player is the full athlete object
+function HomeSection({ player }) {
   const [averages, setAverages] = useState({
     mental: 0,
     physical: 0,
@@ -765,7 +879,7 @@ function HomeSection({ player }) { // player is the full athlete object
   });
 
   useEffect(() => {
-    const avg = computeCategoryAverages(player); // Now accesses player.skills
+    const avg = computeCategoryAverages(player);
     setAverages(avg);
   }, [player]);
 
@@ -781,28 +895,52 @@ function HomeSection({ player }) { // player is the full athlete object
   ];
 
   return (
-    <div className="mx-auto space-y-4">
+    <div className="mx-auto space-y-6">
       {/* Key Insights (Top 3 strengths, etc.) */}
-      <SwipeableInsights player={player} growthTargets={player.growth_targets || []} />
+      <SwipeableInsights 
+        player={player} 
+        growthTargets={player.growth_targets || []}
+      />
 
-      {/* Radar Chart for 6 main categories */}
-      <div className="bg-gray-800 p-5 rounded-lg shadow-md">
-        <h2 className="text-lg font-semibold text-gray-100 mb-4 mt-0">
-          Category Averages
-        </h2>
-        {/* Center the RadarChart */}
-        <div className="w-full flex justify-center">
-          <div className="w-80 h-80">
-            <RadarChart labels={radarLabels} dataValues={radarDataValues} />
+      {/* Main Stats Section */}
+      <div className="grid gap-6 grid-cols-1 lg:grid-cols-2">
+        {/* Radar Chart */}
+        <div className="bg-gray-800 p-5 rounded-lg shadow-md">
+          <h2 className="text-lg font-semibold text-gray-100 mb-4 mt-0">
+            Category Averages
+          </h2>
+          <div className="w-full flex justify-center">
+            <div className="w-full aspect-square max-w-[400px]">
+              <RadarChart labels={radarLabels} dataValues={radarDataValues} />
+            </div>
           </div>
         </div>
+
+        {/* Skill Hierarchy */}
+        <div className="bg-gray-800 p-5 rounded-lg shadow-md">
+          <h2 className="text-lg font-semibold text-gray-100 mb-4 mt-0">
+            Detailed Breakdown
+          </h2>
+          <div className="overflow-auto max-h-[400px] custom-scrollbar">
+            <SkillHierarchy player={player} />
+          </div>
+        </div>
+      </div>
+
+      {/* Additional Info or Future Sections */}
+      <div className="bg-gray-800 p-5 rounded-lg shadow-md">
+        <h2 className="text-lg font-semibold text-gray-100 mb-4">
+          Recent Progress
+        </h2>
+        <p className="text-gray-400 text-sm">
+          Progress tracking section coming soon...
+        </p>
       </div>
     </div>
   );
 }
 
 export default HomeSection;
-
 
 File: src\components\InsightsSection.jsx
 ================================================================================
@@ -850,6 +988,60 @@ const InsightsSection = ({ player }) => {
 
 export default InsightsSection;
 
+
+File: src\components\InstallPrompt.jsx
+================================================================================
+
+// src/components/InstallPrompt.jsx
+import React, { useState, useEffect } from 'react';
+
+export function InstallPrompt() {
+  const [installPrompt, setInstallPrompt] = useState(null);
+
+  useEffect(() => {
+    const handler = (e) => {
+      e.preventDefault();
+      setInstallPrompt(e);
+    };
+
+    window.addEventListener('beforeinstallprompt', handler);
+    return () => window.removeEventListener('beforeinstallprompt', handler);
+  }, []);
+
+  if (!installPrompt) return null;
+
+  return (
+    <div className="fixed bottom-4 left-4 right-4 bg-gray-800 p-4 rounded-lg shadow-lg">
+      <p className="text-gray-100 mb-2">Install Ultify Performance Tracker?</p>
+      <div className="flex space-x-2">
+        <button
+          onClick={() => installPrompt.prompt()}
+          className="bg-emerald-500 text-white px-4 py-2 rounded"
+        >
+          Install
+        </button>
+        <button
+          onClick={() => setInstallPrompt(null)}
+          className="bg-gray-600 text-white px-4 py-2 rounded"
+        >
+          Not now
+        </button>
+      </div>
+    </div>
+  );
+}
+
+File: src\components\LoadingState.jsx
+================================================================================
+
+// src/components/LoadingState.jsx
+export function LoadingState() {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-32 w-32 border-t-2 border-b-2 border-emerald-500"></div>
+      </div>
+    );
+  }
 
 File: src\components\MiniRadial.jsx
 ================================================================================
@@ -1034,7 +1226,7 @@ const ProfileHeader = ({
   overallScore, 
   athletes, 
   selectedAthleteId, 
-  onSelectAthlete 
+  onSelectAthlete,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef(null);
@@ -1096,7 +1288,6 @@ const ProfileHeader = ({
           <h1 className="text-2xl md:text-3xl font-semibold text-white">{name}</h1>
           <p className="text-sm md:text-base text-gray-300 mt-1">{email}</p>
         </div>
-
         <div className="mt-4">
           <OverallScoreRing overallScore={overallScore} />
         </div>
@@ -1108,6 +1299,7 @@ const ProfileHeader = ({
         className="absolute top-4 right-4 md:top-6 md:right-6"
         style={{ zIndex: 9999 }}
       >
+        
         <button
           onClick={() => setIsOpen(!isOpen)}
           className="flex items-center justify-center w-10 h-10 rounded-full 
@@ -1497,6 +1689,189 @@ const RingChart = ({ label, value }) => {
 export default RingChart;
 
 
+File: src\components\RoadmapModal.jsx
+================================================================================
+
+import React from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { 
+  X, Trophy, Target, Calendar, 
+  Dumbbell, Wind, Users, CheckCircle2
+} from 'lucide-react';
+
+const ActionTarget = ({ icon: Icon, title, frequency, progress, total, tags }) => (
+  <div className="bg-gray-700/50 rounded-lg p-4 space-y-2">
+    <div className="flex items-start gap-3">
+      <div className="mt-1">
+        <Icon className="w-5 h-5 text-emerald-400" />
+      </div>
+      <div className="flex-1">
+        <h4 className="font-medium text-gray-200">{title}</h4>
+        <p className="text-sm text-gray-400">{frequency}</p>
+        
+        {/* Progress Section */}
+        <div className="mt-2">
+          <div className="flex justify-between text-xs text-gray-400 mb-1">
+            <span>Progress</span>
+            <span>{progress} / {total}</span>
+          </div>
+          <div className="w-full bg-gray-700 rounded-full h-1.5">
+            <div 
+              className="bg-emerald-400 h-1.5 rounded-full transition-all duration-300"
+              style={{ width: `${(progress / total) * 100}%` }}
+            />
+          </div>
+        </div>
+
+        {/* Tags */}
+        <div className="mt-2 flex flex-wrap gap-2">
+          {tags.map((tag, index) => (
+            <span 
+              key={index}
+              className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-700 text-emerald-400"
+            >
+              {tag}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      {/* Completion Status */}
+      {progress >= total && (
+        <CheckCircle2 className="w-5 h-5 text-emerald-400 flex-shrink-0" />
+      )}
+    </div>
+  </div>
+);
+
+const RoadmapModal = ({ isOpen, onClose, player }) => (
+  <AnimatePresence>
+    {isOpen && (
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50"
+      >
+        <motion.div
+          initial={{ y: '100%' }}
+          animate={{ y: 0 }}
+          exit={{ y: '100%' }}
+          transition={{ type: 'spring', damping: 25 }}
+          className="absolute bottom-0 left-0 right-0 bg-gray-900 rounded-t-2xl max-h-[90vh] overflow-auto"
+        >
+          {/* Header */}
+          <div className="sticky top-0 bg-gray-900/95 backdrop-blur-sm p-4 border-b border-gray-800 flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-white">Development Roadmap</h2>
+            <button
+              onClick={onClose}
+              className="p-1 rounded-lg hover:bg-gray-800"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          {/* Content */}
+          <div className="p-4 space-y-6">
+            {/* Weekly Action Targets */}
+            <section>
+              <div className="flex items-center gap-2 mb-3">
+                <Calendar className="w-4 h-4 text-emerald-400" />
+                <h3 className="text-sm font-medium text-gray-400">THIS WEEK'S TARGETS</h3>
+              </div>
+              <div className="space-y-3">
+                <ActionTarget 
+                  icon={Dumbbell}
+                  title="Endurance Training"
+                  frequency="3 sessions per week"
+                  progress={2}
+                  total={3}
+                  tags={['Sprints', 'Distance Running', 'HIIT']}
+                />
+                
+                <ActionTarget 
+                  icon={Wind}
+                  title="Focused Throwing Practice"
+                  frequency="3 hours per week"
+                  progress={1.5}
+                  total={3}
+                  tags={['Breaking the Mark', 'Release Points', 'Quick Release']}
+                />
+
+                <ActionTarget 
+                  icon={Users}
+                  title="Joint Training Session"
+                  frequency="1 session this week"
+                  progress={0}
+                  total={1}
+                  tags={['Handler Movement', 'Field Vision', 'Team Dynamics']}
+                />
+              </div>
+            </section>
+
+            {/* Monthly Goals */}
+            <section>
+              <div className="flex items-center gap-2 mb-3">
+                <Target className="w-4 h-4 text-emerald-400" />
+                <h3 className="text-sm font-medium text-gray-400">MONTHLY GOALS</h3>
+              </div>
+              <div className="bg-gray-800 rounded-lg p-4">
+                <div className="flex items-start gap-3">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 mt-2" />
+                  <div>
+                    <h4 className="font-medium text-gray-200">Master New Throws</h4>
+                    <p className="text-sm text-gray-400">Focus on specialty throws and situations</p>
+                    <div className="mt-2">
+                      <div className="flex justify-between text-xs text-gray-400 mb-1">
+                        <span>Progress</span>
+                        <span>60%</span>
+                      </div>
+                      <div className="w-full bg-gray-700 rounded-full h-1.5">
+                        <div className="bg-emerald-400 h-1.5 rounded-full w-3/5" />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            {/* Development Path */}
+            <section>
+              <div className="flex items-center gap-2 mb-3">
+                <Trophy className="w-4 h-4 text-emerald-400" />
+                <h3 className="text-sm font-medium text-gray-400">DEVELOPMENT PATH</h3>
+              </div>
+              <div className="bg-gray-800 rounded-lg p-4">
+                <div className="flex items-start gap-3">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 mt-2" />
+                  <div>
+                    <h4 className="font-medium text-gray-200">Handler Certification</h4>
+                    <p className="text-sm text-gray-400">Complete advanced handler training program</p>
+                  </div>
+                </div>
+              </div>
+            </section>
+          </div>
+
+          {/* Action Buttons */}
+          <div className="sticky bottom-0 bg-gray-900/95 backdrop-blur-sm p-4 border-t border-gray-800">
+            <div className="flex gap-3">
+              <button className="flex-1 bg-gray-800 text-white py-3 rounded-lg font-medium">
+                Log Progress
+              </button>
+              <button className="flex-1 bg-emerald-500 text-white py-3 rounded-lg font-medium">
+                Complete Target
+              </button>
+            </div>
+          </div>
+        </motion.div>
+      </motion.div>
+    )}
+  </AnimatePresence>
+);
+
+export default RoadmapModal;
+
 File: src\components\SkillCard.jsx
 ================================================================================
 
@@ -1523,6 +1898,117 @@ const SkillCard = ({ label, value }) => {
 
 export default SkillCard;
 
+
+File: src\components\SkillHierarchy.jsx
+================================================================================
+
+// src/components/SkillHierarchy.jsx
+import React from 'react';
+import { ChevronRight } from 'lucide-react';
+import { averageOfKeys, computeCategoryAverages, computeOverallScore } from '../utils/helpers';
+
+const SkillBar = ({ value, maxValue = 10 }) => (
+  <div className="w-24 bg-gray-700 rounded-full h-1.5 overflow-hidden">
+    <div
+      className="h-1.5 bg-emerald-500 transition-all duration-300"
+      style={{ width: `${(value / maxValue) * 100}%` }}
+    />
+  </div>
+);
+
+const SkillNode = ({ label, value, depth = 0, children }) => {
+  const hasChildren = React.Children.count(children) > 0;
+  
+  return (
+    <div className="space-y-2">
+      <div className={`flex items-center gap-3 ${hasChildren ? 'mb-2' : ''}`}>
+        {depth > 0 && (
+          <div className="flex items-center">
+            <div 
+              className="w-4 h-px bg-gray-700"
+              style={{ marginLeft: `${(depth - 1) * 16}px` }}
+            />
+            <ChevronRight className="w-4 h-4 text-gray-600" />
+          </div>
+        )}
+        
+        <div className="flex-1 flex items-center justify-between">
+          <span className="text-sm font-medium text-gray-300">{label}</span>
+          <div className="flex items-center gap-3">
+            <SkillBar value={value} />
+            <span className="text-sm font-semibold text-emerald-400 w-8">
+              {value.toFixed(1)}
+            </span>
+          </div>
+        </div>
+      </div>
+      
+      {hasChildren && (
+        <div className="space-y-2">
+          {children}
+        </div>
+      )}
+    </div>
+  );
+};
+
+const SkillHierarchy = ({ player }) => {
+  // Get all category averages using helper function
+  const categoryAverages = computeCategoryAverages(player);
+  const overallScore = computeOverallScore(player);
+
+  // Compute throwing subcategory averages (not included in helpers)
+  const throwingSubcategories = {
+    backhand: [
+      'backhand_power', 'backhand_accuracy', 'backhand_quick_release',
+      'backhand_release_variations', 'backhand_against_wind',
+      'backhand_against_difficult_marks', 'backhand_tempo_control'
+    ],
+    forehand: [
+      'forehand_power', 'forehand_accuracy', 'forehand_quick_release',
+      'forehand_release_variations', 'forehand_against_wind',
+      'forehand_against_difficult_marks', 'forehand_tempo_control'
+    ],
+    specialty: [
+      'specialty_power', 'specialty_accuracy', 'specialty_quick_release',
+      'specialty_release_variations', 'specialty_against_wind',
+      'specialty_against_difficult_marks', 'specialty_tempo_control'
+    ],
+    hucking: [
+      'hucking_confidence', 'hucking_shape_control',
+      'hucking_tempo_control', 'hucking_placement'
+    ]
+  };
+
+  const throwingAverages = {
+    backhand: averageOfKeys(player, throwingSubcategories.backhand),
+    forehand: averageOfKeys(player, throwingSubcategories.forehand),
+    specialty: averageOfKeys(player, throwingSubcategories.specialty),
+    hucking: averageOfKeys(player, throwingSubcategories.hucking)
+  };
+
+  return (
+    <div className="space-y-4">
+      <SkillNode label="Overall" value={overallScore}>
+        <SkillNode label="Physical" value={categoryAverages.physical} depth={1} />
+        <SkillNode label="Mental" value={categoryAverages.mental} depth={1} />
+        <SkillNode label="Defensive" value={categoryAverages.defensive} depth={1} />
+        <SkillNode label="Offensive" value={categoryAverages.offensive} depth={1}>
+          <SkillNode label="Cutting" value={categoryAverages.cutting} depth={2} />
+          <SkillNode label="Handling" value={categoryAverages.handling} depth={2} />
+          <SkillNode label="Throwing" value={categoryAverages.throwing} depth={2}>
+            <SkillNode label="Backhand" value={throwingAverages.backhand} depth={3} />
+            <SkillNode label="Forehand" value={throwingAverages.forehand} depth={3} />
+            <SkillNode label="Specialty" value={throwingAverages.specialty} depth={3} />
+            <SkillNode label="Hucking" value={throwingAverages.hucking} depth={3} />
+          </SkillNode>
+        </SkillNode>
+      </SkillNode>
+    </div>
+  );
+};
+
+export default SkillHierarchy;
 
 File: src\components\SwipeableInsights.jsx
 ================================================================================
@@ -1557,8 +2043,6 @@ const InsightsCard = ({ title, data = [], subtitle }) => (
 );
 
 const SwipeableInsights = ({ player, growthTargets = [] }) => {
-    console.log('Growth Targets:', growthTargets);
-console.log('Player Skills:', player.skills);
 
     const [currentIndex, setCurrentIndex] = useState(0);
     const [isDragging, setIsDragging] = useState(false);
@@ -1569,9 +2053,9 @@ console.log('Player Skills:', player.skills);
     const growthTargetPairs = growthTargets
     .map(targetKey => [
       targetKey.replace(/_/g, ' '),  
-      player.skills[targetKey] || 0
+      player.skills[targetKey] || 0  // Access skills through player.skills
     ])
-    .filter(([_, value]) => typeof value === 'number');  
+    .filter(([_, value]) => typeof value === 'number'); 
   
     useEffect(() => {
       const updateWidth = () => {
@@ -1591,11 +2075,12 @@ console.log('Player Skills:', player.skills);
     }, []);
   
     const getSortedSkills = () => {
-      const skillEntries = Object.entries(player)
-        .filter(([key, val]) => typeof val === 'number' && !key.includes('id'))
-        .sort((a, b) => b[1] - a[1]);
-      return skillEntries;
-    };
+        // Change to access player.skills instead of player directly
+        const skillEntries = Object.entries(player.skills)
+          .filter(([key, val]) => typeof val === 'number' && !key.includes('id'))
+          .sort((a, b) => b[1] - a[1]);
+        return skillEntries;
+      };
   
     // Call getSortedSkills once and store result
     const sortedSkills = getSortedSkills();
@@ -2366,7 +2851,7 @@ const mockData = [
       switching_on_defense: 8,
       zone_defense: 6,
       defensive_mental_fortitude: 4,
-      handler_movement: 10,
+      handler_movement: 9,
       poise_with_disc: 10,
       breaking_the_mark: 9,
       resetting_from_trap_sideline: 9,
@@ -2429,6 +2914,7 @@ import ReactDOM from 'react-dom/client';
 import './index.css';
 import App from './App.jsx';
 import { BrowserRouter } from 'react-router-dom'; // Import BrowserRouter
+import { registerServiceWorker } from './serviceWorkerRegistration';
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(
@@ -2440,6 +2926,7 @@ root.render(
     </BrowserRouter>
   </React.StrictMode>
 );
+registerServiceWorker();
 
 
 File: src\reportWebVitals.js
@@ -2460,6 +2947,25 @@ const reportWebVitals = onPerfEntry => {
 export default reportWebVitals;
 
 
+File: src\serviceWorkerRegistration.js
+================================================================================
+
+// src/serviceWorkerRegistration.js
+export function registerServiceWorker() {
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker
+          .register('/service-worker.js')
+          .then((registration) => {
+            console.log('SW registered:', registration);
+          })
+          .catch((error) => {
+            console.log('SW registration failed:', error);
+          });
+      });
+    }
+  }
+
 File: src\setupTests.js
 ================================================================================
 
@@ -2469,6 +2975,35 @@ File: src\setupTests.js
 // learn more: https://github.com/testing-library/jest-dom
 import '@testing-library/jest-dom';
 
+
+File: src\utils\cache.js
+================================================================================
+
+// src/utils/cache.js
+export const DataCache = {
+    async getPlayer(id) {
+      const key = `player-${id}`;
+      try {
+        const cached = localStorage.getItem(key);
+        if (cached) {
+          return JSON.parse(cached);
+        }
+        return null;
+      } catch (error) {
+        console.error('Error accessing cache:', error);
+        return null;
+      }
+    },
+  
+    async setPlayer(id, data) {
+      const key = `player-${id}`;
+      try {
+        localStorage.setItem(key, JSON.stringify(data));
+      } catch (error) {
+        console.error('Error saving to cache:', error);
+      }
+    }
+  };
 
 File: src\utils\constants.js
 ================================================================================
@@ -2493,7 +3028,7 @@ File: src\utils\helpers.js
 
 import { METADATA_KEYS } from './constants';
 
-// A small utility to average numeric values for a given list of keys
+// A utility to average numeric values for a given list of keys
 export function averageOfKeys(player, keys) {
   let sum = 0, count = 0;
   for (const key of keys) {
@@ -2505,28 +3040,69 @@ export function averageOfKeys(player, keys) {
   return count === 0 ? 0 : parseFloat((sum / count).toFixed(1));
 }
 
-// Compute category averages for Mental, Physical, Cutting, Throwing, Defense, Handling, Offensive
-export function computeCategoryAverages(player) {
-  // Define keys for each category
-  const categories = {
-    mental: [
-      'mental_game',
-      'feedback_implementation',
-      'injury_prevention',
-      'recovery',
-      'flexibility_mobility',
-    ],
-    physical: [
-      'speed_explosiveness',
-      'endurance',
-      'vertical_leap',
-      'change_of_direction',
-      'boxing_out',
-      'laying_out',
-      'recovery',
-      'flexibility_mobility',
-      'injury_prevention',
-    ],
+// A recursive utility to compute averages for nested categories
+function computeAverages(player, categories) {
+  const result = {};
+
+  for (const [category, subcategories] of Object.entries(categories)) {
+    if (Array.isArray(subcategories)) {
+      // Leaf node: compute average of the keys
+      result[capitalize(category)] = averageOfKeys(player, subcategories);
+    } else if (typeof subcategories === 'object' && subcategories !== null) {
+      // Nested category: recurse
+      result[capitalize(category)] = computeAverages(player, subcategories);
+      
+      // Compute the average of immediate numeric subcategories
+      const subcategoryValues = Object.values(result[capitalize(category)]);
+      const numericValues = subcategoryValues.filter(value => typeof value === 'number');
+
+      // Calculate average only if there are numeric subcategories
+      if (numericValues.length > 0) {
+        const avg = parseFloat((numericValues.reduce((a, b) => a + b, 0) / numericValues.length).toFixed(1));
+        result[capitalize(category)]['Average'] = avg;
+      }
+    }
+  }
+
+  return result;
+}
+
+// Helper function to capitalize category names
+function capitalize(str) {
+  return str.charAt(0).toUpperCase() + str.slice(1);
+}
+
+// Define nested categories with subcategories
+const categories = {
+  physical: [
+    'speed_explosiveness',
+    'endurance',
+    'vertical_leap',
+    'change_of_direction',
+    'boxing_out',
+    'laying_out',
+    'recovery',
+    'flexibility_mobility',
+    'injury_prevention',
+  ],
+  mental: [
+    'mental_game',
+    'feedback_implementation',
+    'defensive_strategy',
+    'offensive_strategy',
+  ],
+  defensive: [
+    'normal_marking',
+    'sideline_trap_marking',
+    'downfield_defending',
+    'handler_defending',
+    'defensive_pattern_recognition',
+    'help_defense',
+    'switching_on_defense',
+    'zone_defense',
+    'defensive_mental_fortitude',
+  ],
+  offensive: {
     cutting: [
       'angles',
       'fakes_footwork',
@@ -2546,71 +3122,50 @@ export function computeCategoryAverages(player) {
       'offensive_pattern_recognition',
       'throw_and_go',
     ],
-    throwing: [
-      // Backhand
-      'backhand_power',
-      'backhand_accuracy',
-      'backhand_quick_release',
-      'backhand_release_variations',
-      'backhand_against_wind',
-      'backhand_against_difficult_marks',
-      'backhand_tempo_control',
-      // Forehand
-      'forehand_power',
-      'forehand_accuracy',
-      'forehand_quick_release',
-      'forehand_release_variations',
-      'forehand_against_wind',
-      'forehand_against_difficult_marks',
-      'forehand_tempo_control',
-      // Specialty
-      'specialty_power',
-      'specialty_accuracy',
-      'specialty_quick_release',
-      'specialty_release_variations',
-      'specialty_against_wind',
-      'specialty_against_difficult_marks',
-      'specialty_tempo_control',
-      // Hucking
-      'hucking_confidence',
-      'hucking_shape_control',
-      'hucking_tempo_control',
-      'hucking_placement',
-    ],
-    defensive: [
-      'defensive_strategy',
-      'normal_marking',
-      'sideline_trap_marking',
-      'downfield_defending',
-      'handler_defending',
-      'defensive_pattern_recognition',
-      'help_defense',
-      'switching_on_defense',
-      'zone_defense',
-      'defensive_mental_fortitude',
-    ],
-  };
+    throwing: {
+      backhand: [
+        'backhand_power',
+        'backhand_accuracy',
+        'backhand_quick_release',
+        'backhand_release_variations',
+        'backhand_against_wind',
+        'backhand_against_difficult_marks',
+        'backhand_tempo_control',
+      ],
+      forehand: [
+        'forehand_power',
+        'forehand_accuracy',
+        'forehand_quick_release',
+        'forehand_release_variations',
+        'forehand_against_wind',
+        'forehand_against_difficult_marks',
+        'forehand_tempo_control',
+      ],
+      specialty: [
+        'specialty_power',
+        'specialty_accuracy',
+        'specialty_quick_release',
+        'specialty_release_variations',
+        'specialty_against_wind',
+        'specialty_against_difficult_marks',
+        'specialty_tempo_control',
+      ],
+      hucking: [
+        'hucking_confidence',
+        'hucking_shape_control',
+        'hucking_tempo_control',
+        'hucking_placement',
+      ],
+    },
+  },
+};
 
-  // Compute individual averages
-  const mental = averageOfKeys(player, categories.mental);
-  const physical = averageOfKeys(player, categories.physical);
-  const cutting = averageOfKeys(player, categories.cutting);
-  const handling = averageOfKeys(player, categories.handling);
-  const throwing = averageOfKeys(player, categories.throwing);
-  const defensive = averageOfKeys(player, categories.defensive);
+// Compute category averages with subcategories
+export function computeCategoryAverages(player) {
+  // Compute averages for all categories and subcategories
+  const averages = computeAverages(player, categories);
 
-  // Offensive is the average of cutting, handling, and throwing
-  const offensive = parseFloat(((cutting + handling + throwing) / 3).toFixed(1));
-
-  return {
-    mental,
-    physical,
-    cutting,
-    handling,
-    throwing,
-    defensive,
-    offensive,
-  };
+  return averages;
 }
 
 // Compute overall score excluding metadata
@@ -2640,6 +3195,37 @@ export const createAthleteSlug = (name) => {
   });
 };
 
+
+File: src\utils\sync.js
+================================================================================
+
+// src/utils/sync.js
+export const SyncManager = {
+    async queueSync(action, data) {
+      const syncQueue = JSON.parse(localStorage.getItem('syncQueue') || '[]');
+      syncQueue.push({ action, data, timestamp: Date.now() });
+      localStorage.setItem('syncQueue', JSON.stringify(syncQueue));
+    },
+  
+    async processSyncQueue() {
+      if (!navigator.onLine) return;
+  
+      const syncQueue = JSON.parse(localStorage.getItem('syncQueue') || '[]');
+      if (syncQueue.length === 0) return;
+  
+      for (const item of syncQueue) {
+        try {
+          // Process sync item
+          await this.processItem(item);
+          // Remove from queue if successful
+          const newQueue = syncQueue.filter(i => i !== item);
+          localStorage.setItem('syncQueue', JSON.stringify(newQueue));
+        } catch (error) {
+          console.error('Sync failed for item:', item, error);
+        }
+      }
+    }
+  };
 
 File: tailwind.config.js
 ================================================================================
@@ -2738,66 +3324,18 @@ import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import mockData from './data/mockData';
 import ProfileHeader from './components/ProfileHeader';
-import SwipeableInsights from './components/SwipeableInsights';
 import CategorySection from './components/CategorySection';
 import RadarChart from './components/RadarChart';
 import OffensiveSection from './components/OffensiveSection';
 import RadialTabs from './components/RadialTabs';
 import { computeCategoryAverages, computeOverallScore } from './utils/helpers';
+import HomeSection from './components/HomeSection';  // Add this import if not already there
+import { SyncManager } from './utils/sync';
+import { InstallPrompt } from './components/InstallPrompt';
+import RoadmapModal from './components/RoadmapModal';
+import FloatingActionButton from './components/FloatingActionButton';
 
 import './index.css';
-
-/* -------------------------------------
-   2) HOME SECTION (DASHBOARD)
--------------------------------------- */
-
-function HomeSection({ player }) { // player is the full athlete object
-  const [averages, setAverages] = useState({
-    mental: 0,
-    physical: 0,
-    cutting: 0,
-    handling: 0,
-    throwing: 0,
-    defensive: 0,
-    offensive: 0,
-  });
-
-  useEffect(() => {
-    const avg = computeCategoryAverages(player); // Accesses player.skills
-    setAverages(avg);
-  }, [player]);
-
-  // Radar chart data for 6 categories
-  const radarLabels = ['Mental', 'Physical', 'Cutting', 'Handling', 'Throwing', 'Defense'];
-  const radarDataValues = [
-    averages.mental,
-    averages.physical,
-    averages.cutting,
-    averages.handling,
-    averages.throwing,
-    averages.defensive,
-  ];
-
-  return (
-    <div className="mx-auto space-y-4">
-      {/* Key Insights (Top 3 strengths, etc.) */}
-      <SwipeableInsights player={player.skills} />
-
-      {/* Radar Chart for 6 main categories */}
-      <div className="bg-gray-800 p-5 rounded-lg shadow-md">
-        <h2 className="text-lg font-semibold text-gray-100 mb-4 mt-0">
-          Category Averages
-        </h2>
-        {/* Center the RadarChart */}
-        <div className="w-full flex justify-center">
-          <div className="w-80 h-80">
-            <RadarChart labels={radarLabels} dataValues={radarDataValues} />
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 /* -------------------------------------
    3) MAIN APP
@@ -2806,6 +3344,9 @@ function HomeSection({ player }) { // player is the full athlete object
 function App() {
   const location = useLocation();
   const navigate = useNavigate();
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [syncPending, setSyncPending] = useState(false);
+  const [isRoadmapOpen, setRoadmapOpen] = useState(false);
 
   // 3.1) Manage Selected Athlete
   const [selectedAthleteId, setSelectedAthleteId] = useState(mockData[0].id);
@@ -2830,7 +3371,6 @@ function App() {
 
   // Find the selected athlete from mockData
   const selectedAthlete = mockData.find(athlete => athlete.id === selectedAthleteId);
-
   // 3.4) Group data into categories
   const getCategoryData = (p) => ({
     physical: [
@@ -2901,7 +3441,6 @@ function App() {
       },
     },
     defensive: [
-      { key: 'defensive_strategy', label: 'Defensive Strategy' },
       { key: 'normal_marking', label: 'Normal Marking' },
       { key: 'sideline_trap_marking', label: 'Sideline Trap Marking' },
       { key: 'downfield_defending', label: 'Downfield Defending' },
@@ -2915,9 +3454,8 @@ function App() {
     mental: [
       { key: 'mental_game', label: 'Mental Game' },
       { key: 'feedback_implementation', label: 'Feedback Implementation' },
-      { key: 'injury_prevention', label: 'Injury Prevention' },
-      { key: 'recovery', label: 'Recovery' },
-      { key: 'flexibility_mobility', label: 'Flexibility & Mobility' },
+      { key: 'defensive_strategy', label: 'Defensive Team Strategy' },
+      { key: 'offensive_strategy', label: 'Offensive Team Strategy' },
     ],
   });
 
@@ -2951,11 +3489,34 @@ function App() {
     selectedAthlete.skills.specialty_accuracy,
   ];
 
+  useEffect(() => {
+    const handleOnline = () => {
+      setIsOnline(true);
+      SyncManager.processSyncQueue();
+    };
+    const handleOffline = () => setIsOnline(false);
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
   /* -------------------------------------
      RENDER
   -------------------------------------- */
   return (
+    
     <div className="min-h-screen bg-gray-900 text-gray-100 flex flex-col">
+            {!isOnline && (
+        <div className="bg-yellow-600 text-white px-4 py-2 text-center">
+          You're offline. Some features may be limited.
+        </div>
+      )}
+      <InstallPrompt />
       {/** 1) Profile Header at the top */}
       <ProfileHeader
         name={selectedAthlete.metadata.name}
@@ -3027,6 +3588,20 @@ function App() {
             player={selectedAthlete.skills}
           />
         )}
+
+        {/* Roadmap Modal */}
+        <RoadmapModal 
+        isOpen={isRoadmapOpen}
+        onClose={() => setRoadmapOpen(false)}
+        player={selectedAthlete}
+      />
+          <FloatingActionButton onClick={() => setRoadmapOpen(true)} />
+    
+    <RoadmapModal 
+      isOpen={isRoadmapOpen}
+      onClose={() => setRoadmapOpen(false)}
+      player={selectedAthlete}
+    />
       </div>
     </div>
   );
@@ -3162,6 +3737,55 @@ const CategorySection = ({ title, skills, player }) => {
 export default CategorySection;
 
 
+File: src\components\FloatingActionButton.jsx
+================================================================================
+
+import React, { useState } from 'react';
+import { Milestone } from 'lucide-react';
+
+const FloatingActionButton = ({ onClick }) => {
+  const [ripple, setRipple] = useState({ active: false, x: 0, y: 0 });
+
+  const handleClick = (e) => {
+    // Get click coordinates relative to button
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    // Trigger ripple
+    setRipple({ active: true, x, y });
+    
+    // Reset ripple after animation
+    setTimeout(() => setRipple({ active: false, x: 0, y: 0 }), 600);
+    
+    // Call the original onClick handler
+    onClick();
+  };
+
+  return (
+    <button
+      onClick={handleClick}
+      className="fixed bottom-6 right-6 bg-emerald-500 hover:bg-emerald-600 text-white p-3 rounded-full shadow-lg z-50 transition-colors duration-200 flex items-center justify-center overflow-hidden"
+      aria-label="View Development Path"
+    >
+      <Milestone className="w-6 h-6" />
+      {ripple.active && (
+        <span
+          className="absolute animate-ripple rounded-full bg-white/30"
+          style={{
+            left: ripple.x - 50,  // Center the 100px wide ripple
+            top: ripple.y - 50,   // Center the 100px tall ripple
+            width: '100px',
+            height: '100px',
+          }}
+        />
+      )}
+    </button>
+  );
+};
+
+export default FloatingActionButton;
+
 File: src\components\HomeSection.jsx
 ================================================================================
 
@@ -3170,9 +3794,10 @@ File: src\components\HomeSection.jsx
 import React, { useState, useEffect } from 'react';
 import RadarChart from './RadarChart';
 import SwipeableInsights from './SwipeableInsights';
+import SkillHierarchy from './SkillHierarchy';
 import { computeCategoryAverages } from '../utils/helpers';
 
-function HomeSection({ player }) { // player is the full athlete object
+function HomeSection({ player }) {
   const [averages, setAverages] = useState({
     mental: 0,
     physical: 0,
@@ -3184,7 +3809,7 @@ function HomeSection({ player }) { // player is the full athlete object
   });
 
   useEffect(() => {
-    const avg = computeCategoryAverages(player); // Now accesses player.skills
+    const avg = computeCategoryAverages(player);
     setAverages(avg);
   }, [player]);
 
@@ -3200,28 +3825,52 @@ function HomeSection({ player }) { // player is the full athlete object
   ];
 
   return (
-    <div className="mx-auto space-y-4">
+    <div className="mx-auto space-y-6">
       {/* Key Insights (Top 3 strengths, etc.) */}
-      <SwipeableInsights player={player} growthTargets={player.growth_targets || []} />
+      <SwipeableInsights 
+        player={player} 
+        growthTargets={player.growth_targets || []}
+      />
 
-      {/* Radar Chart for 6 main categories */}
-      <div className="bg-gray-800 p-5 rounded-lg shadow-md">
-        <h2 className="text-lg font-semibold text-gray-100 mb-4 mt-0">
-          Category Averages
-        </h2>
-        {/* Center the RadarChart */}
-        <div className="w-full flex justify-center">
-          <div className="w-80 h-80">
-            <RadarChart labels={radarLabels} dataValues={radarDataValues} />
+      {/* Main Stats Section */}
+      <div className="grid gap-6 grid-cols-1 lg:grid-cols-2">
+        {/* Radar Chart */}
+        <div className="bg-gray-800 p-5 rounded-lg shadow-md">
+          <h2 className="text-lg font-semibold text-gray-100 mb-4 mt-0">
+            Category Averages
+          </h2>
+          <div className="w-full flex justify-center">
+            <div className="w-full aspect-square max-w-[400px]">
+              <RadarChart labels={radarLabels} dataValues={radarDataValues} />
+            </div>
           </div>
         </div>
+
+        {/* Skill Hierarchy */}
+        <div className="bg-gray-800 p-5 rounded-lg shadow-md">
+          <h2 className="text-lg font-semibold text-gray-100 mb-4 mt-0">
+            Detailed Breakdown
+          </h2>
+          <div className="overflow-auto max-h-[400px] custom-scrollbar">
+            <SkillHierarchy player={player} />
+          </div>
+        </div>
+      </div>
+
+      {/* Additional Info or Future Sections */}
+      <div className="bg-gray-800 p-5 rounded-lg shadow-md">
+        <h2 className="text-lg font-semibold text-gray-100 mb-4">
+          Recent Progress
+        </h2>
+        <p className="text-gray-400 text-sm">
+          Progress tracking section coming soon...
+        </p>
       </div>
     </div>
   );
 }
 
 export default HomeSection;
-
 
 File: src\components\InsightsSection.jsx
 ================================================================================
@@ -3269,6 +3918,60 @@ const InsightsSection = ({ player }) => {
 
 export default InsightsSection;
 
+
+File: src\components\InstallPrompt.jsx
+================================================================================
+
+// src/components/InstallPrompt.jsx
+import React, { useState, useEffect } from 'react';
+
+export function InstallPrompt() {
+  const [installPrompt, setInstallPrompt] = useState(null);
+
+  useEffect(() => {
+    const handler = (e) => {
+      e.preventDefault();
+      setInstallPrompt(e);
+    };
+
+    window.addEventListener('beforeinstallprompt', handler);
+    return () => window.removeEventListener('beforeinstallprompt', handler);
+  }, []);
+
+  if (!installPrompt) return null;
+
+  return (
+    <div className="fixed bottom-4 left-4 right-4 bg-gray-800 p-4 rounded-lg shadow-lg">
+      <p className="text-gray-100 mb-2">Install Ultify Performance Tracker?</p>
+      <div className="flex space-x-2">
+        <button
+          onClick={() => installPrompt.prompt()}
+          className="bg-emerald-500 text-white px-4 py-2 rounded"
+        >
+          Install
+        </button>
+        <button
+          onClick={() => setInstallPrompt(null)}
+          className="bg-gray-600 text-white px-4 py-2 rounded"
+        >
+          Not now
+        </button>
+      </div>
+    </div>
+  );
+}
+
+File: src\components\LoadingState.jsx
+================================================================================
+
+// src/components/LoadingState.jsx
+export function LoadingState() {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-32 w-32 border-t-2 border-b-2 border-emerald-500"></div>
+      </div>
+    );
+  }
 
 File: src\components\MiniRadial.jsx
 ================================================================================
@@ -3453,7 +4156,7 @@ const ProfileHeader = ({
   overallScore, 
   athletes, 
   selectedAthleteId, 
-  onSelectAthlete 
+  onSelectAthlete,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef(null);
@@ -3515,7 +4218,6 @@ const ProfileHeader = ({
           <h1 className="text-2xl md:text-3xl font-semibold text-white">{name}</h1>
           <p className="text-sm md:text-base text-gray-300 mt-1">{email}</p>
         </div>
-
         <div className="mt-4">
           <OverallScoreRing overallScore={overallScore} />
         </div>
@@ -3527,6 +4229,7 @@ const ProfileHeader = ({
         className="absolute top-4 right-4 md:top-6 md:right-6"
         style={{ zIndex: 9999 }}
       >
+        
         <button
           onClick={() => setIsOpen(!isOpen)}
           className="flex items-center justify-center w-10 h-10 rounded-full 
@@ -3916,6 +4619,189 @@ const RingChart = ({ label, value }) => {
 export default RingChart;
 
 
+File: src\components\RoadmapModal.jsx
+================================================================================
+
+import React from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { 
+  X, Trophy, Target, Calendar, 
+  Dumbbell, Wind, Users, CheckCircle2
+} from 'lucide-react';
+
+const ActionTarget = ({ icon: Icon, title, frequency, progress, total, tags }) => (
+  <div className="bg-gray-700/50 rounded-lg p-4 space-y-2">
+    <div className="flex items-start gap-3">
+      <div className="mt-1">
+        <Icon className="w-5 h-5 text-emerald-400" />
+      </div>
+      <div className="flex-1">
+        <h4 className="font-medium text-gray-200">{title}</h4>
+        <p className="text-sm text-gray-400">{frequency}</p>
+        
+        {/* Progress Section */}
+        <div className="mt-2">
+          <div className="flex justify-between text-xs text-gray-400 mb-1">
+            <span>Progress</span>
+            <span>{progress} / {total}</span>
+          </div>
+          <div className="w-full bg-gray-700 rounded-full h-1.5">
+            <div 
+              className="bg-emerald-400 h-1.5 rounded-full transition-all duration-300"
+              style={{ width: `${(progress / total) * 100}%` }}
+            />
+          </div>
+        </div>
+
+        {/* Tags */}
+        <div className="mt-2 flex flex-wrap gap-2">
+          {tags.map((tag, index) => (
+            <span 
+              key={index}
+              className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-700 text-emerald-400"
+            >
+              {tag}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      {/* Completion Status */}
+      {progress >= total && (
+        <CheckCircle2 className="w-5 h-5 text-emerald-400 flex-shrink-0" />
+      )}
+    </div>
+  </div>
+);
+
+const RoadmapModal = ({ isOpen, onClose, player }) => (
+  <AnimatePresence>
+    {isOpen && (
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50"
+      >
+        <motion.div
+          initial={{ y: '100%' }}
+          animate={{ y: 0 }}
+          exit={{ y: '100%' }}
+          transition={{ type: 'spring', damping: 25 }}
+          className="absolute bottom-0 left-0 right-0 bg-gray-900 rounded-t-2xl max-h-[90vh] overflow-auto"
+        >
+          {/* Header */}
+          <div className="sticky top-0 bg-gray-900/95 backdrop-blur-sm p-4 border-b border-gray-800 flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-white">Development Roadmap</h2>
+            <button
+              onClick={onClose}
+              className="p-1 rounded-lg hover:bg-gray-800"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          {/* Content */}
+          <div className="p-4 space-y-6">
+            {/* Weekly Action Targets */}
+            <section>
+              <div className="flex items-center gap-2 mb-3">
+                <Calendar className="w-4 h-4 text-emerald-400" />
+                <h3 className="text-sm font-medium text-gray-400">THIS WEEK'S TARGETS</h3>
+              </div>
+              <div className="space-y-3">
+                <ActionTarget 
+                  icon={Dumbbell}
+                  title="Endurance Training"
+                  frequency="3 sessions per week"
+                  progress={2}
+                  total={3}
+                  tags={['Sprints', 'Distance Running', 'HIIT']}
+                />
+                
+                <ActionTarget 
+                  icon={Wind}
+                  title="Focused Throwing Practice"
+                  frequency="3 hours per week"
+                  progress={1.5}
+                  total={3}
+                  tags={['Breaking the Mark', 'Release Points', 'Quick Release']}
+                />
+
+                <ActionTarget 
+                  icon={Users}
+                  title="Joint Training Session"
+                  frequency="1 session this week"
+                  progress={0}
+                  total={1}
+                  tags={['Handler Movement', 'Field Vision', 'Team Dynamics']}
+                />
+              </div>
+            </section>
+
+            {/* Monthly Goals */}
+            <section>
+              <div className="flex items-center gap-2 mb-3">
+                <Target className="w-4 h-4 text-emerald-400" />
+                <h3 className="text-sm font-medium text-gray-400">MONTHLY GOALS</h3>
+              </div>
+              <div className="bg-gray-800 rounded-lg p-4">
+                <div className="flex items-start gap-3">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 mt-2" />
+                  <div>
+                    <h4 className="font-medium text-gray-200">Master New Throws</h4>
+                    <p className="text-sm text-gray-400">Focus on specialty throws and situations</p>
+                    <div className="mt-2">
+                      <div className="flex justify-between text-xs text-gray-400 mb-1">
+                        <span>Progress</span>
+                        <span>60%</span>
+                      </div>
+                      <div className="w-full bg-gray-700 rounded-full h-1.5">
+                        <div className="bg-emerald-400 h-1.5 rounded-full w-3/5" />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            {/* Development Path */}
+            <section>
+              <div className="flex items-center gap-2 mb-3">
+                <Trophy className="w-4 h-4 text-emerald-400" />
+                <h3 className="text-sm font-medium text-gray-400">DEVELOPMENT PATH</h3>
+              </div>
+              <div className="bg-gray-800 rounded-lg p-4">
+                <div className="flex items-start gap-3">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 mt-2" />
+                  <div>
+                    <h4 className="font-medium text-gray-200">Handler Certification</h4>
+                    <p className="text-sm text-gray-400">Complete advanced handler training program</p>
+                  </div>
+                </div>
+              </div>
+            </section>
+          </div>
+
+          {/* Action Buttons */}
+          <div className="sticky bottom-0 bg-gray-900/95 backdrop-blur-sm p-4 border-t border-gray-800">
+            <div className="flex gap-3">
+              <button className="flex-1 bg-gray-800 text-white py-3 rounded-lg font-medium">
+                Log Progress
+              </button>
+              <button className="flex-1 bg-emerald-500 text-white py-3 rounded-lg font-medium">
+                Complete Target
+              </button>
+            </div>
+          </div>
+        </motion.div>
+      </motion.div>
+    )}
+  </AnimatePresence>
+);
+
+export default RoadmapModal;
+
 File: src\components\SkillCard.jsx
 ================================================================================
 
@@ -3942,6 +4828,117 @@ const SkillCard = ({ label, value }) => {
 
 export default SkillCard;
 
+
+File: src\components\SkillHierarchy.jsx
+================================================================================
+
+// src/components/SkillHierarchy.jsx
+import React from 'react';
+import { ChevronRight } from 'lucide-react';
+import { averageOfKeys, computeCategoryAverages, computeOverallScore } from '../utils/helpers';
+
+const SkillBar = ({ value, maxValue = 10 }) => (
+  <div className="w-24 bg-gray-700 rounded-full h-1.5 overflow-hidden">
+    <div
+      className="h-1.5 bg-emerald-500 transition-all duration-300"
+      style={{ width: `${(value / maxValue) * 100}%` }}
+    />
+  </div>
+);
+
+const SkillNode = ({ label, value, depth = 0, children }) => {
+  const hasChildren = React.Children.count(children) > 0;
+  
+  return (
+    <div className="space-y-2">
+      <div className={`flex items-center gap-3 ${hasChildren ? 'mb-2' : ''}`}>
+        {depth > 0 && (
+          <div className="flex items-center">
+            <div 
+              className="w-4 h-px bg-gray-700"
+              style={{ marginLeft: `${(depth - 1) * 16}px` }}
+            />
+            <ChevronRight className="w-4 h-4 text-gray-600" />
+          </div>
+        )}
+        
+        <div className="flex-1 flex items-center justify-between">
+          <span className="text-sm font-medium text-gray-300">{label}</span>
+          <div className="flex items-center gap-3">
+            <SkillBar value={value} />
+            <span className="text-sm font-semibold text-emerald-400 w-8">
+              {value.toFixed(1)}
+            </span>
+          </div>
+        </div>
+      </div>
+      
+      {hasChildren && (
+        <div className="space-y-2">
+          {children}
+        </div>
+      )}
+    </div>
+  );
+};
+
+const SkillHierarchy = ({ player }) => {
+  // Get all category averages using helper function
+  const categoryAverages = computeCategoryAverages(player);
+  const overallScore = computeOverallScore(player);
+
+  // Compute throwing subcategory averages (not included in helpers)
+  const throwingSubcategories = {
+    backhand: [
+      'backhand_power', 'backhand_accuracy', 'backhand_quick_release',
+      'backhand_release_variations', 'backhand_against_wind',
+      'backhand_against_difficult_marks', 'backhand_tempo_control'
+    ],
+    forehand: [
+      'forehand_power', 'forehand_accuracy', 'forehand_quick_release',
+      'forehand_release_variations', 'forehand_against_wind',
+      'forehand_against_difficult_marks', 'forehand_tempo_control'
+    ],
+    specialty: [
+      'specialty_power', 'specialty_accuracy', 'specialty_quick_release',
+      'specialty_release_variations', 'specialty_against_wind',
+      'specialty_against_difficult_marks', 'specialty_tempo_control'
+    ],
+    hucking: [
+      'hucking_confidence', 'hucking_shape_control',
+      'hucking_tempo_control', 'hucking_placement'
+    ]
+  };
+
+  const throwingAverages = {
+    backhand: averageOfKeys(player, throwingSubcategories.backhand),
+    forehand: averageOfKeys(player, throwingSubcategories.forehand),
+    specialty: averageOfKeys(player, throwingSubcategories.specialty),
+    hucking: averageOfKeys(player, throwingSubcategories.hucking)
+  };
+
+  return (
+    <div className="space-y-4">
+      <SkillNode label="Overall" value={overallScore}>
+        <SkillNode label="Physical" value={categoryAverages.physical} depth={1} />
+        <SkillNode label="Mental" value={categoryAverages.mental} depth={1} />
+        <SkillNode label="Defensive" value={categoryAverages.defensive} depth={1} />
+        <SkillNode label="Offensive" value={categoryAverages.offensive} depth={1}>
+          <SkillNode label="Cutting" value={categoryAverages.cutting} depth={2} />
+          <SkillNode label="Handling" value={categoryAverages.handling} depth={2} />
+          <SkillNode label="Throwing" value={categoryAverages.throwing} depth={2}>
+            <SkillNode label="Backhand" value={throwingAverages.backhand} depth={3} />
+            <SkillNode label="Forehand" value={throwingAverages.forehand} depth={3} />
+            <SkillNode label="Specialty" value={throwingAverages.specialty} depth={3} />
+            <SkillNode label="Hucking" value={throwingAverages.hucking} depth={3} />
+          </SkillNode>
+        </SkillNode>
+      </SkillNode>
+    </div>
+  );
+};
+
+export default SkillHierarchy;
 
 File: src\components\SwipeableInsights.jsx
 ================================================================================
@@ -3976,8 +4973,6 @@ const InsightsCard = ({ title, data = [], subtitle }) => (
 );
 
 const SwipeableInsights = ({ player, growthTargets = [] }) => {
-    console.log('Growth Targets:', growthTargets);
-console.log('Player Skills:', player.skills);
 
     const [currentIndex, setCurrentIndex] = useState(0);
     const [isDragging, setIsDragging] = useState(false);
@@ -3988,9 +4983,9 @@ console.log('Player Skills:', player.skills);
     const growthTargetPairs = growthTargets
     .map(targetKey => [
       targetKey.replace(/_/g, ' '),  
-      player.skills[targetKey] || 0
+      player.skills[targetKey] || 0  // Access skills through player.skills
     ])
-    .filter(([_, value]) => typeof value === 'number');  
+    .filter(([_, value]) => typeof value === 'number'); 
   
     useEffect(() => {
       const updateWidth = () => {
@@ -4010,11 +5005,12 @@ console.log('Player Skills:', player.skills);
     }, []);
   
     const getSortedSkills = () => {
-      const skillEntries = Object.entries(player)
-        .filter(([key, val]) => typeof val === 'number' && !key.includes('id'))
-        .sort((a, b) => b[1] - a[1]);
-      return skillEntries;
-    };
+        // Change to access player.skills instead of player directly
+        const skillEntries = Object.entries(player.skills)
+          .filter(([key, val]) => typeof val === 'number' && !key.includes('id'))
+          .sort((a, b) => b[1] - a[1]);
+        return skillEntries;
+      };
   
     // Call getSortedSkills once and store result
     const sortedSkills = getSortedSkills();
@@ -4785,7 +5781,7 @@ const mockData = [
       switching_on_defense: 8,
       zone_defense: 6,
       defensive_mental_fortitude: 4,
-      handler_movement: 10,
+      handler_movement: 9,
       poise_with_disc: 10,
       breaking_the_mark: 9,
       resetting_from_trap_sideline: 9,
@@ -4848,6 +5844,7 @@ import ReactDOM from 'react-dom/client';
 import './index.css';
 import App from './App.jsx';
 import { BrowserRouter } from 'react-router-dom'; // Import BrowserRouter
+import { registerServiceWorker } from './serviceWorkerRegistration';
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(
@@ -4859,6 +5856,7 @@ root.render(
     </BrowserRouter>
   </React.StrictMode>
 );
+registerServiceWorker();
 
 
 File: src\reportWebVitals.js
@@ -4879,6 +5877,25 @@ const reportWebVitals = onPerfEntry => {
 export default reportWebVitals;
 
 
+File: src\serviceWorkerRegistration.js
+================================================================================
+
+// src/serviceWorkerRegistration.js
+export function registerServiceWorker() {
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker
+          .register('/service-worker.js')
+          .then((registration) => {
+            console.log('SW registered:', registration);
+          })
+          .catch((error) => {
+            console.log('SW registration failed:', error);
+          });
+      });
+    }
+  }
+
 File: src\setupTests.js
 ================================================================================
 
@@ -4888,6 +5905,35 @@ File: src\setupTests.js
 // learn more: https://github.com/testing-library/jest-dom
 import '@testing-library/jest-dom';
 
+
+File: src\utils\cache.js
+================================================================================
+
+// src/utils/cache.js
+export const DataCache = {
+    async getPlayer(id) {
+      const key = `player-${id}`;
+      try {
+        const cached = localStorage.getItem(key);
+        if (cached) {
+          return JSON.parse(cached);
+        }
+        return null;
+      } catch (error) {
+        console.error('Error accessing cache:', error);
+        return null;
+      }
+    },
+  
+    async setPlayer(id, data) {
+      const key = `player-${id}`;
+      try {
+        localStorage.setItem(key, JSON.stringify(data));
+      } catch (error) {
+        console.error('Error saving to cache:', error);
+      }
+    }
+  };
 
 File: src\utils\constants.js
 ================================================================================
@@ -4912,7 +5958,7 @@ File: src\utils\helpers.js
 
 import { METADATA_KEYS } from './constants';
 
-// A small utility to average numeric values for a given list of keys
+// A utility to average numeric values for a given list of keys
 export function averageOfKeys(player, keys) {
   let sum = 0, count = 0;
   for (const key of keys) {
@@ -4924,28 +5970,69 @@ export function averageOfKeys(player, keys) {
   return count === 0 ? 0 : parseFloat((sum / count).toFixed(1));
 }
 
-// Compute category averages for Mental, Physical, Cutting, Throwing, Defense, Handling, Offensive
-export function computeCategoryAverages(player) {
-  // Define keys for each category
-  const categories = {
-    mental: [
-      'mental_game',
-      'feedback_implementation',
-      'injury_prevention',
-      'recovery',
-      'flexibility_mobility',
-    ],
-    physical: [
-      'speed_explosiveness',
-      'endurance',
-      'vertical_leap',
-      'change_of_direction',
-      'boxing_out',
-      'laying_out',
-      'recovery',
-      'flexibility_mobility',
-      'injury_prevention',
-    ],
+// A recursive utility to compute averages for nested categories
+function computeAverages(player, categories) {
+  const result = {};
+
+  for (const [category, subcategories] of Object.entries(categories)) {
+    if (Array.isArray(subcategories)) {
+      // Leaf node: compute average of the keys
+      result[capitalize(category)] = averageOfKeys(player, subcategories);
+    } else if (typeof subcategories === 'object' && subcategories !== null) {
+      // Nested category: recurse
+      result[capitalize(category)] = computeAverages(player, subcategories);
+      
+      // Compute the average of immediate numeric subcategories
+      const subcategoryValues = Object.values(result[capitalize(category)]);
+      const numericValues = subcategoryValues.filter(value => typeof value === 'number');
+
+      // Calculate average only if there are numeric subcategories
+      if (numericValues.length > 0) {
+        const avg = parseFloat((numericValues.reduce((a, b) => a + b, 0) / numericValues.length).toFixed(1));
+        result[capitalize(category)]['Average'] = avg;
+      }
+    }
+  }
+
+  return result;
+}
+
+// Helper function to capitalize category names
+function capitalize(str) {
+  return str.charAt(0).toUpperCase() + str.slice(1);
+}
+
+// Define nested categories with subcategories
+const categories = {
+  physical: [
+    'speed_explosiveness',
+    'endurance',
+    'vertical_leap',
+    'change_of_direction',
+    'boxing_out',
+    'laying_out',
+    'recovery',
+    'flexibility_mobility',
+    'injury_prevention',
+  ],
+  mental: [
+    'mental_game',
+    'feedback_implementation',
+    'defensive_strategy',
+    'offensive_strategy',
+  ],
+  defensive: [
+    'normal_marking',
+    'sideline_trap_marking',
+    'downfield_defending',
+    'handler_defending',
+    'defensive_pattern_recognition',
+    'help_defense',
+    'switching_on_defense',
+    'zone_defense',
+    'defensive_mental_fortitude',
+  ],
+  offensive: {
     cutting: [
       'angles',
       'fakes_footwork',
@@ -4965,71 +6052,50 @@ export function computeCategoryAverages(player) {
       'offensive_pattern_recognition',
       'throw_and_go',
     ],
-    throwing: [
-      // Backhand
-      'backhand_power',
-      'backhand_accuracy',
-      'backhand_quick_release',
-      'backhand_release_variations',
-      'backhand_against_wind',
-      'backhand_against_difficult_marks',
-      'backhand_tempo_control',
-      // Forehand
-      'forehand_power',
-      'forehand_accuracy',
-      'forehand_quick_release',
-      'forehand_release_variations',
-      'forehand_against_wind',
-      'forehand_against_difficult_marks',
-      'forehand_tempo_control',
-      // Specialty
-      'specialty_power',
-      'specialty_accuracy',
-      'specialty_quick_release',
-      'specialty_release_variations',
-      'specialty_against_wind',
-      'specialty_against_difficult_marks',
-      'specialty_tempo_control',
-      // Hucking
-      'hucking_confidence',
-      'hucking_shape_control',
-      'hucking_tempo_control',
-      'hucking_placement',
-    ],
-    defensive: [
-      'defensive_strategy',
-      'normal_marking',
-      'sideline_trap_marking',
-      'downfield_defending',
-      'handler_defending',
-      'defensive_pattern_recognition',
-      'help_defense',
-      'switching_on_defense',
-      'zone_defense',
-      'defensive_mental_fortitude',
-    ],
-  };
+    throwing: {
+      backhand: [
+        'backhand_power',
+        'backhand_accuracy',
+        'backhand_quick_release',
+        'backhand_release_variations',
+        'backhand_against_wind',
+        'backhand_against_difficult_marks',
+        'backhand_tempo_control',
+      ],
+      forehand: [
+        'forehand_power',
+        'forehand_accuracy',
+        'forehand_quick_release',
+        'forehand_release_variations',
+        'forehand_against_wind',
+        'forehand_against_difficult_marks',
+        'forehand_tempo_control',
+      ],
+      specialty: [
+        'specialty_power',
+        'specialty_accuracy',
+        'specialty_quick_release',
+        'specialty_release_variations',
+        'specialty_against_wind',
+        'specialty_against_difficult_marks',
+        'specialty_tempo_control',
+      ],
+      hucking: [
+        'hucking_confidence',
+        'hucking_shape_control',
+        'hucking_tempo_control',
+        'hucking_placement',
+      ],
+    },
+  },
+};
 
-  // Compute individual averages
-  const mental = averageOfKeys(player, categories.mental);
-  const physical = averageOfKeys(player, categories.physical);
-  const cutting = averageOfKeys(player, categories.cutting);
-  const handling = averageOfKeys(player, categories.handling);
-  const throwing = averageOfKeys(player, categories.throwing);
-  const defensive = averageOfKeys(player, categories.defensive);
+// Compute category averages with subcategories
+export function computeCategoryAverages(player) {
+  // Compute averages for all categories and subcategories
+  const averages = computeAverages(player, categories);
 
-  // Offensive is the average of cutting, handling, and throwing
-  const offensive = parseFloat(((cutting + handling + throwing) / 3).toFixed(1));
-
-  return {
-    mental,
-    physical,
-    cutting,
-    handling,
-    throwing,
-    defensive,
-    offensive,
-  };
+  return averages;
 }
 
 // Compute overall score excluding metadata
@@ -5059,4 +6125,35 @@ export const createAthleteSlug = (name) => {
   });
 };
 
+
+File: src\utils\sync.js
+================================================================================
+
+// src/utils/sync.js
+export const SyncManager = {
+    async queueSync(action, data) {
+      const syncQueue = JSON.parse(localStorage.getItem('syncQueue') || '[]');
+      syncQueue.push({ action, data, timestamp: Date.now() });
+      localStorage.setItem('syncQueue', JSON.stringify(syncQueue));
+    },
+  
+    async processSyncQueue() {
+      if (!navigator.onLine) return;
+  
+      const syncQueue = JSON.parse(localStorage.getItem('syncQueue') || '[]');
+      if (syncQueue.length === 0) return;
+  
+      for (const item of syncQueue) {
+        try {
+          // Process sync item
+          await this.processItem(item);
+          // Remove from queue if successful
+          const newQueue = syncQueue.filter(i => i !== item);
+          localStorage.setItem('syncQueue', JSON.stringify(newQueue));
+        } catch (error) {
+          console.error('Sync failed for item:', item, error);
+        }
+      }
+    }
+  };
 
