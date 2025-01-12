@@ -1,6 +1,6 @@
 Project: performance-app
 Version: 0.1.0
-Generated: 2025-01-12T08:00:45.920Z
+Generated: 2025-01-12T20:33:11.721Z
 ================================================================================
 
 File: concat-files.js
@@ -3028,7 +3028,7 @@ File: src\utils\helpers.js
 
 import { METADATA_KEYS } from './constants';
 
-// A utility to average numeric values for a given list of keys
+// A small utility to average numeric values for a given list of keys
 export function averageOfKeys(player, keys) {
   let sum = 0, count = 0;
   for (const key of keys) {
@@ -3040,69 +3040,28 @@ export function averageOfKeys(player, keys) {
   return count === 0 ? 0 : parseFloat((sum / count).toFixed(1));
 }
 
-// A recursive utility to compute averages for nested categories
-function computeAverages(player, categories) {
-  const result = {};
+// Compute category averages for Mental, Physical, Cutting, Throwing, Defense, Handling, Offensive
+export function computeCategoryAverages(player) {
+  // Define keys for each category
+  const categories = {
+    mental: [
+      'mental_game',
+      'feedback_implementation',
+      'defensive_strategy',
+      'offensive_strategy',
 
-  for (const [category, subcategories] of Object.entries(categories)) {
-    if (Array.isArray(subcategories)) {
-      // Leaf node: compute average of the keys
-      result[capitalize(category)] = averageOfKeys(player, subcategories);
-    } else if (typeof subcategories === 'object' && subcategories !== null) {
-      // Nested category: recurse
-      result[capitalize(category)] = computeAverages(player, subcategories);
-      
-      // Compute the average of immediate numeric subcategories
-      const subcategoryValues = Object.values(result[capitalize(category)]);
-      const numericValues = subcategoryValues.filter(value => typeof value === 'number');
-
-      // Calculate average only if there are numeric subcategories
-      if (numericValues.length > 0) {
-        const avg = parseFloat((numericValues.reduce((a, b) => a + b, 0) / numericValues.length).toFixed(1));
-        result[capitalize(category)]['Average'] = avg;
-      }
-    }
-  }
-
-  return result;
-}
-
-// Helper function to capitalize category names
-function capitalize(str) {
-  return str.charAt(0).toUpperCase() + str.slice(1);
-}
-
-// Define nested categories with subcategories
-const categories = {
-  physical: [
-    'speed_explosiveness',
-    'endurance',
-    'vertical_leap',
-    'change_of_direction',
-    'boxing_out',
-    'laying_out',
-    'recovery',
-    'flexibility_mobility',
-    'injury_prevention',
-  ],
-  mental: [
-    'mental_game',
-    'feedback_implementation',
-    'defensive_strategy',
-    'offensive_strategy',
-  ],
-  defensive: [
-    'normal_marking',
-    'sideline_trap_marking',
-    'downfield_defending',
-    'handler_defending',
-    'defensive_pattern_recognition',
-    'help_defense',
-    'switching_on_defense',
-    'zone_defense',
-    'defensive_mental_fortitude',
-  ],
-  offensive: {
+    ],
+    physical: [
+      'speed_explosiveness',
+      'endurance',
+      'vertical_leap',
+      'change_of_direction',
+      'boxing_out',
+      'laying_out',
+      'recovery',
+      'flexibility_mobility',
+      'injury_prevention',
+    ],
     cutting: [
       'angles',
       'fakes_footwork',
@@ -3122,50 +3081,70 @@ const categories = {
       'offensive_pattern_recognition',
       'throw_and_go',
     ],
-    throwing: {
-      backhand: [
-        'backhand_power',
-        'backhand_accuracy',
-        'backhand_quick_release',
-        'backhand_release_variations',
-        'backhand_against_wind',
-        'backhand_against_difficult_marks',
-        'backhand_tempo_control',
-      ],
-      forehand: [
-        'forehand_power',
-        'forehand_accuracy',
-        'forehand_quick_release',
-        'forehand_release_variations',
-        'forehand_against_wind',
-        'forehand_against_difficult_marks',
-        'forehand_tempo_control',
-      ],
-      specialty: [
-        'specialty_power',
-        'specialty_accuracy',
-        'specialty_quick_release',
-        'specialty_release_variations',
-        'specialty_against_wind',
-        'specialty_against_difficult_marks',
-        'specialty_tempo_control',
-      ],
-      hucking: [
-        'hucking_confidence',
-        'hucking_shape_control',
-        'hucking_tempo_control',
-        'hucking_placement',
-      ],
-    },
-  },
-};
+    throwing: [
+      // Backhand
+      'backhand_power',
+      'backhand_accuracy',
+      'backhand_quick_release',
+      'backhand_release_variations',
+      'backhand_against_wind',
+      'backhand_against_difficult_marks',
+      'backhand_tempo_control',
+      // Forehand
+      'forehand_power',
+      'forehand_accuracy',
+      'forehand_quick_release',
+      'forehand_release_variations',
+      'forehand_against_wind',
+      'forehand_against_difficult_marks',
+      'forehand_tempo_control',
+      // Specialty
+      'specialty_power',
+      'specialty_accuracy',
+      'specialty_quick_release',
+      'specialty_release_variations',
+      'specialty_against_wind',
+      'specialty_against_difficult_marks',
+      'specialty_tempo_control',
+      // Hucking
+      'hucking_confidence',
+      'hucking_shape_control',
+      'hucking_tempo_control',
+      'hucking_placement',
+    ],
+    defensive: [
+      'normal_marking',
+      'sideline_trap_marking',
+      'downfield_defending',
+      'handler_defending',
+      'defensive_pattern_recognition',
+      'help_defense',
+      'switching_on_defense',
+      'zone_defense',
+      'defensive_mental_fortitude',
+    ],
+  };
 
-// Compute category averages with subcategories
-export function computeCategoryAverages(player) {
-  // Compute averages for all categories and subcategories
-  const averages = computeAverages(player, categories);
+  // Compute individual averages
+  const mental = averageOfKeys(player, categories.mental);
+  const physical = averageOfKeys(player, categories.physical);
+  const cutting = averageOfKeys(player, categories.cutting);
+  const handling = averageOfKeys(player, categories.handling);
+  const throwing = averageOfKeys(player, categories.throwing);
+  const defensive = averageOfKeys(player, categories.defensive);
 
-  return averages;
+  // Offensive is the average of cutting, handling, and throwing
+  const offensive = parseFloat(((cutting + handling + throwing) / 3).toFixed(1));
+
+  return {
+    mental,
+    physical,
+    cutting,
+    handling,
+    throwing,
+    defensive,
+    offensive,
+  };
 }
 
 // Compute overall score excluding metadata
@@ -5958,7 +5937,7 @@ File: src\utils\helpers.js
 
 import { METADATA_KEYS } from './constants';
 
-// A utility to average numeric values for a given list of keys
+// A small utility to average numeric values for a given list of keys
 export function averageOfKeys(player, keys) {
   let sum = 0, count = 0;
   for (const key of keys) {
@@ -5970,69 +5949,28 @@ export function averageOfKeys(player, keys) {
   return count === 0 ? 0 : parseFloat((sum / count).toFixed(1));
 }
 
-// A recursive utility to compute averages for nested categories
-function computeAverages(player, categories) {
-  const result = {};
+// Compute category averages for Mental, Physical, Cutting, Throwing, Defense, Handling, Offensive
+export function computeCategoryAverages(player) {
+  // Define keys for each category
+  const categories = {
+    mental: [
+      'mental_game',
+      'feedback_implementation',
+      'defensive_strategy',
+      'offensive_strategy',
 
-  for (const [category, subcategories] of Object.entries(categories)) {
-    if (Array.isArray(subcategories)) {
-      // Leaf node: compute average of the keys
-      result[capitalize(category)] = averageOfKeys(player, subcategories);
-    } else if (typeof subcategories === 'object' && subcategories !== null) {
-      // Nested category: recurse
-      result[capitalize(category)] = computeAverages(player, subcategories);
-      
-      // Compute the average of immediate numeric subcategories
-      const subcategoryValues = Object.values(result[capitalize(category)]);
-      const numericValues = subcategoryValues.filter(value => typeof value === 'number');
-
-      // Calculate average only if there are numeric subcategories
-      if (numericValues.length > 0) {
-        const avg = parseFloat((numericValues.reduce((a, b) => a + b, 0) / numericValues.length).toFixed(1));
-        result[capitalize(category)]['Average'] = avg;
-      }
-    }
-  }
-
-  return result;
-}
-
-// Helper function to capitalize category names
-function capitalize(str) {
-  return str.charAt(0).toUpperCase() + str.slice(1);
-}
-
-// Define nested categories with subcategories
-const categories = {
-  physical: [
-    'speed_explosiveness',
-    'endurance',
-    'vertical_leap',
-    'change_of_direction',
-    'boxing_out',
-    'laying_out',
-    'recovery',
-    'flexibility_mobility',
-    'injury_prevention',
-  ],
-  mental: [
-    'mental_game',
-    'feedback_implementation',
-    'defensive_strategy',
-    'offensive_strategy',
-  ],
-  defensive: [
-    'normal_marking',
-    'sideline_trap_marking',
-    'downfield_defending',
-    'handler_defending',
-    'defensive_pattern_recognition',
-    'help_defense',
-    'switching_on_defense',
-    'zone_defense',
-    'defensive_mental_fortitude',
-  ],
-  offensive: {
+    ],
+    physical: [
+      'speed_explosiveness',
+      'endurance',
+      'vertical_leap',
+      'change_of_direction',
+      'boxing_out',
+      'laying_out',
+      'recovery',
+      'flexibility_mobility',
+      'injury_prevention',
+    ],
     cutting: [
       'angles',
       'fakes_footwork',
@@ -6052,50 +5990,70 @@ const categories = {
       'offensive_pattern_recognition',
       'throw_and_go',
     ],
-    throwing: {
-      backhand: [
-        'backhand_power',
-        'backhand_accuracy',
-        'backhand_quick_release',
-        'backhand_release_variations',
-        'backhand_against_wind',
-        'backhand_against_difficult_marks',
-        'backhand_tempo_control',
-      ],
-      forehand: [
-        'forehand_power',
-        'forehand_accuracy',
-        'forehand_quick_release',
-        'forehand_release_variations',
-        'forehand_against_wind',
-        'forehand_against_difficult_marks',
-        'forehand_tempo_control',
-      ],
-      specialty: [
-        'specialty_power',
-        'specialty_accuracy',
-        'specialty_quick_release',
-        'specialty_release_variations',
-        'specialty_against_wind',
-        'specialty_against_difficult_marks',
-        'specialty_tempo_control',
-      ],
-      hucking: [
-        'hucking_confidence',
-        'hucking_shape_control',
-        'hucking_tempo_control',
-        'hucking_placement',
-      ],
-    },
-  },
-};
+    throwing: [
+      // Backhand
+      'backhand_power',
+      'backhand_accuracy',
+      'backhand_quick_release',
+      'backhand_release_variations',
+      'backhand_against_wind',
+      'backhand_against_difficult_marks',
+      'backhand_tempo_control',
+      // Forehand
+      'forehand_power',
+      'forehand_accuracy',
+      'forehand_quick_release',
+      'forehand_release_variations',
+      'forehand_against_wind',
+      'forehand_against_difficult_marks',
+      'forehand_tempo_control',
+      // Specialty
+      'specialty_power',
+      'specialty_accuracy',
+      'specialty_quick_release',
+      'specialty_release_variations',
+      'specialty_against_wind',
+      'specialty_against_difficult_marks',
+      'specialty_tempo_control',
+      // Hucking
+      'hucking_confidence',
+      'hucking_shape_control',
+      'hucking_tempo_control',
+      'hucking_placement',
+    ],
+    defensive: [
+      'normal_marking',
+      'sideline_trap_marking',
+      'downfield_defending',
+      'handler_defending',
+      'defensive_pattern_recognition',
+      'help_defense',
+      'switching_on_defense',
+      'zone_defense',
+      'defensive_mental_fortitude',
+    ],
+  };
 
-// Compute category averages with subcategories
-export function computeCategoryAverages(player) {
-  // Compute averages for all categories and subcategories
-  const averages = computeAverages(player, categories);
+  // Compute individual averages
+  const mental = averageOfKeys(player, categories.mental);
+  const physical = averageOfKeys(player, categories.physical);
+  const cutting = averageOfKeys(player, categories.cutting);
+  const handling = averageOfKeys(player, categories.handling);
+  const throwing = averageOfKeys(player, categories.throwing);
+  const defensive = averageOfKeys(player, categories.defensive);
 
-  return averages;
+  // Offensive is the average of cutting, handling, and throwing
+  const offensive = parseFloat(((cutting + handling + throwing) / 3).toFixed(1));
+
+  return {
+    mental,
+    physical,
+    cutting,
+    handling,
+    throwing,
+    defensive,
+    offensive,
+  };
 }
 
 // Compute overall score excluding metadata

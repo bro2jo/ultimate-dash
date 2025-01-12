@@ -34,20 +34,28 @@ function App() {
   // 3.2) Automatically select athlete based on URL parameters
   useEffect(() => {
     const searchParams = new URLSearchParams(location.search);
-    const athleteIdFromUrl = searchParams.get('id');      // ?id=3
-    const athleteNameFromUrl = searchParams.get('name');  // ?name=Jonathan
+    const athleteIdFromUrl = searchParams.get('id');
 
     if (athleteIdFromUrl) {
-      const athleteId = parseInt(athleteIdFromUrl, 10);
-      const athleteExists = mockData.some(a => a.id === athleteId);
-      if (athleteExists) {
-        setSelectedAthleteId(athleteId);
-      } else {
-        // If athlete ID doesn't exist, navigate to default or show an error
-        navigate('/', { replace: true });
-      }
+        const athleteId = parseInt(athleteIdFromUrl, 10);
+        const athleteExists = mockData.some(a => a.id === athleteId);
+        if (athleteExists) {
+            setSelectedAthleteId(athleteId);
+        } else {
+            navigate('/', { replace: true });
+        }
+    } else if (mockData.length > 0) {
+        // Default to athlete with id 7 if available
+        const defaultAthlete = mockData.find(a => a.id === 7);
+        if (defaultAthlete) {
+            setSelectedAthleteId(7);
+        } else {
+            // Fallback to the first athlete if id 7 is not found
+            setSelectedAthleteId(mockData[0].id);
+        }
     }
-  }, [location.search, navigate]);
+}, [location.search, navigate]);
+
 
   // Find the selected athlete from mockData
   const selectedAthlete = mockData.find(athlete => athlete.id === selectedAthleteId);
