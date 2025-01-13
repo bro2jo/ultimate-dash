@@ -14,6 +14,12 @@ module.exports = {
           400: '#d946ef',
         },
       },
+      transitionProperty: {
+        'opacity': 'opacity',
+      },
+      transitionDuration: {
+        '500': '500ms',
+      },
     },
   },
   plugins: [],

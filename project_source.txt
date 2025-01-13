@@ -1,6 +1,6 @@
 Project: performance-app
 Version: 0.1.0
-Generated: 2025-01-13T01:07:57.633Z
+Generated: 2025-01-13T16:01:57.908Z
 ================================================================================
 
 File: concat-files.js
@@ -129,13 +129,15 @@ File: package.json
     "react-icons": "^5.4.0",
     "react-router-dom": "^7.1.1",
     "react-scripts": "5.0.1",
+    "sharp": "^0.33.5",
     "slugify": "^1.6.6"
   },
   "scripts": {
     "start": "react-scripts start",
     "build": "react-scripts build",
     "test": "react-scripts test",
-    "eject": "react-scripts eject"
+    "eject": "react-scripts eject",
+    "optimize-images": "node scripts/optimize-images.js"
   },
   "eslintConfig": {
     "extends": [
@@ -177,32 +179,50 @@ module.exports = {
 File: public\service-worker.js
 ================================================================================
 
-const CACHE_NAME = 'ultify-cache-v1';
+const CACHE_NAME = 'ultify-cache-v2'; // Increment version for updates
+const IMAGE_CACHE_NAME = 'ultify-images-v1';
+const DATA_CACHE_NAME = 'ultify-data-v1';
+
+// Static assets to cache immediately
 const STATIC_ASSETS = [
   '/',
   '/index.html',
   '/manifest.json',
   '/static/css/main.css',
   '/static/js/main.js',
-  '/images/preview-image.png',
   '/favicon.svg',
+];
+
+// Image assets to cache on first use
+const IMAGE_ASSETS = [
+  '/images/background-sm.webp',
+  '/images/background-md.webp',
+  '/images/background-lg.webp',
+  '/images/background-mobileSm.webp',
+  '/images/background-mobileMd.webp',
+  '/images/background-mobileLg.webp',
+  '/images/background-placeholder.webp',
   '/icons/icon-72x72.png',
   '/icons/icon-144x144.png',
   '/icons/icon-192x192.png',
   '/icons/icon-256x256.png',
   '/icons/icon-384x384.png',
   '/icons/icon-512x512.png',
-  // Add paths to your key assets
 ];
-
-const DATA_CACHE_NAME = 'ultify-data-v1';
 
 // Install Service Worker
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(STATIC_ASSETS);
-    })
+    Promise.all([
+      // Cache static assets immediately
+      caches.open(CACHE_NAME).then((cache) => {
+        return cache.addAll(STATIC_ASSETS);
+      }),
+      // Pre-cache the tiny placeholder image
+      caches.open(IMAGE_CACHE_NAME).then((cache) => {
+        return cache.add('/images/background-placeholder.webp');
+      })
+    ])
   );
   self.skipWaiting();
 });
@@ -214,26 +234,54 @@ self.addEventListener('activate', (event) => {
       return Promise.all(
         cacheNames
           .filter((cacheName) => {
+            // Remove any cache that doesn't match our current versions
             return (
               cacheName !== CACHE_NAME &&
-              cacheName !== DATA_CACHE_NAME
+              cacheName !== DATA_CACHE_NAME &&
+              cacheName !== IMAGE_CACHE_NAME
             );
           })
           .map((cacheName) => {
             return caches.delete(cacheName);
           })
       );
+    }).then(() => {
+      // Notify clients about the update
+      self.clients.matchAll().then(clients => {
+        clients.forEach(client => client.postMessage({ type: 'CACHE_UPDATED' }));
+      });
     })
   );
   self.clients.claim();
 });
 
-// Fetch handler with network-first strategy for data, cache-first for static assets
+// Helper function to check if request is for an image
+function isImageRequest(request) {
+  return request.destination === 'image' || 
+         IMAGE_ASSETS.some(asset => request.url.includes(asset));
+}
+
+// Helper function for network request with timeout
+async function timeoutFetch(request, timeout = 3000) {
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeout);
+    const response = await fetch(request, { signal: controller.signal });
+    clearTimeout(timeoutId);
+    return response;
+  } catch (error) {
+    throw error;
+  }
+}
+
+// Fetch handler with optimized strategies
 self.addEventListener('fetch', (event) => {
-  if (event.request.url.includes('/api/')) {
-    // Network-first strategy for API calls
+  const url = new URL(event.request.url);
+
+  // Handle API requests
+  if (url.pathname.startsWith('/api/')) {
     event.respondWith(
-      fetch(event.request)
+      timeoutFetch(event.request)
         .then((response) => {
           if (response.status === 200) {
             const responseClone = response.clone();
@@ -244,14 +292,91 @@ self.addEventListener('fetch', (event) => {
           return response;
         })
         .catch(() => {
-          return caches.match(event.request);
+          return caches.match(event.request).then(response => {
+            return response || new Response(JSON.stringify({ error: 'offline' }), {
+              headers: { 'Content-Type': 'application/json' }
+            });
+          });
         })
     );
-  } else {
-    // Cache-first strategy for static assets
+    return;
+  }
+
+  // Handle image requests
+  if (isImageRequest(event.request)) {
     event.respondWith(
-      caches.match(event.request).then((response) => {
-        return response || fetch(event.request);
+      caches.match(event.request).then((cachedResponse) => {
+        // Return cached response if available
+        if (cachedResponse) {
+          // Fetch and cache update in background
+          event.waitUntil(
+            timeoutFetch(event.request).then(response => {
+              if (response.ok) {
+                caches.open(IMAGE_CACHE_NAME).then(cache => {
+                  cache.put(event.request, response);
+                });
+              }
+            })
+          );
+          return cachedResponse;
+        }
+
+        // If not cached, fetch and cache
+        return timeoutFetch(event.request).then(response => {
+          if (response.ok) {
+            const responseClone = response.clone();
+            event.waitUntil(
+              caches.open(IMAGE_CACHE_NAME).then(cache => {
+                cache.put(event.request, responseClone);
+              })
+            );
+          }
+          return response;
+        });
+      })
+    );
+    return;
+  }
+
+  // Handle other static assets
+  event.respondWith(
+    caches.match(event.request).then((cachedResponse) => {
+      if (cachedResponse) {
+        return cachedResponse;
+      }
+      return timeoutFetch(event.request).then(response => {
+        if (response.ok && (response.type === 'basic' || response.type === 'cors')) {
+          const responseClone = response.clone();
+          event.waitUntil(
+            caches.open(CACHE_NAME).then(cache => {
+              cache.put(event.request, responseClone);
+            })
+          );
+        }
+        return response;
+      });
+    })
+  );
+});
+
+// Handle background sync
+self.addEventListener('sync', (event) => {
+  if (event.tag === 'sync-data') {
+    event.waitUntil(
+      // Implement your sync logic here
+      Promise.resolve()
+    );
+  }
+});
+
+// Handle push notifications
+self.addEventListener('push', (event) => {
+  if (event.data) {
+    const data = event.data.json();
+    event.waitUntil(
+      self.registration.showNotification(data.title, {
+        body: data.message,
+        icon: '/icons/icon-192x192.png'
       })
     );
   }
@@ -331,6 +456,125 @@ This section has moved here: [https://facebook.github.io/create-react-app/docs/d
 
 This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
 
+
+File: scripts\optimize-images.js
+================================================================================
+
+const sharp = require('sharp');
+const path = require('path');
+
+// Input image path
+const inputImage = path.join(__dirname, '../src/assets/background.jpg');
+
+// Output directory
+const outputDir = path.join(__dirname, '../public/images');
+
+// Define size variants (maintaining 16:9 aspect ratio)
+const sizeVariants = {
+  sm: { width: 640, height: 360 },    // Small screens
+  md: { width: 1280, height: 720 },   // Medium screens
+  lg: { width: 1920, height: 1080 },  // Large screens/desktop
+};
+
+// Create different sizes and formats
+async function optimizeImages() {
+  try {
+    // Generate WebP versions for all sizes
+    for (const [size, dimensions] of Object.entries(sizeVariants)) {
+      // WebP version
+      await sharp(inputImage)
+        .resize(dimensions.width, dimensions.height, {
+          fit: 'cover',
+          withoutEnlargement: true // Prevents upscaling if original is smaller
+        })
+        .webp({ 
+          quality: 80,
+          effort: 6, // Higher compression effort
+          smartSubsample: true // Better color detail preservation
+        })
+        .toFile(path.join(outputDir, `background-${size}.webp`));
+
+      // JPEG fallback
+      await sharp(inputImage)
+        .resize(dimensions.width, dimensions.height, {
+          fit: 'cover',
+          withoutEnlargement: true
+        })
+        .jpeg({ 
+          quality: 80,
+          progressive: true,
+          mozjpeg: true, // Use mozjpeg for better compression
+          chromaSubsampling: '4:4:4' // Better quality
+        })
+        .toFile(path.join(outputDir, `background-${size}.jpg`));
+    }
+
+    // Generate special mobile-optimized versions (still landscape)
+    const mobileVariants = {
+      mobileSm: { width: 640, height: 360 },
+      mobileMd: { width: 960, height: 540 },
+      mobileLg: { width: 1280, height: 720 }
+    };
+
+    for (const [size, dimensions] of Object.entries(mobileVariants)) {
+      await sharp(inputImage)
+        .resize(dimensions.width, dimensions.height, {
+          fit: 'cover',
+          withoutEnlargement: true
+        })
+        .webp({ 
+          quality: 80,
+          effort: 6,
+          smartSubsample: true
+        })
+        .toFile(path.join(outputDir, `background-${size}.webp`));
+
+      await sharp(inputImage)
+        .resize(dimensions.width, dimensions.height, {
+          fit: 'cover',
+          withoutEnlargement: true
+        })
+        .jpeg({ 
+          quality: 80,
+          progressive: true,
+          mozjpeg: true,
+          chromaSubsampling: '4:4:4'
+        })
+        .toFile(path.join(outputDir, `background-${size}.jpg`));
+    }
+
+    // Generate a tiny placeholder for blur-up effect
+    await sharp(inputImage)
+      .resize(20, 11) // Tiny version maintaining aspect ratio
+      .blur(2) // Slight blur for better placeholder appearance
+      .webp({ quality: 20 })
+      .toFile(path.join(outputDir, 'background-placeholder.webp'));
+
+    console.log('Images optimized successfully!');
+    
+    // Log out the file sizes for verification
+    const files = await Promise.all([
+      sharp(path.join(outputDir, 'background-sm.webp')).metadata(),
+      sharp(path.join(outputDir, 'background-md.webp')).metadata(),
+      sharp(path.join(outputDir, 'background-lg.webp')).metadata(),
+      sharp(path.join(outputDir, 'background-mobileSm.webp')).metadata(),
+      sharp(path.join(outputDir, 'background-mobileMd.webp')).metadata(),
+      sharp(path.join(outputDir, 'background-mobileLg.webp')).metadata(),
+    ]);
+    
+    console.log('Generated file sizes:');
+    files.forEach(file => {
+      console.log(`${file.width}x${file.height}: ${(file.size / 1024).toFixed(2)}KB`);
+    });
+
+  } catch (error) {
+    console.error('Error optimizing images:', error);
+    process.exit(1);
+  }
+}
+
+// Run the optimization
+optimizeImages();
 
 File: src\App.css
 ================================================================================
@@ -1206,12 +1450,29 @@ File: src\components\LoadingState.jsx
 
 // src/components/LoadingState.jsx
 export function LoadingState() {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-32 w-32 border-t-2 border-b-2 border-emerald-500"></div>
+  return (
+    <div className="min-h-screen w-full">
+      {/* Background placeholder */}
+      <div 
+        className="absolute inset-0 bg-gradient-to-b from-gray-800 to-gray-900 animate-pulse"
+        style={{
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+        }}
+      />
+      
+      {/* Loading spinner overlay */}
+      <div className="relative z-10 flex items-center justify-center min-h-screen">
+        <div className="flex flex-col items-center gap-4">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-emerald-500" />
+          <div className="text-gray-300 text-sm animate-pulse">
+            Loading...
+          </div>
+        </div>
       </div>
-    );
-  }
+    </div>
+  );
+}
 
 File: src\components\MiniRadial.jsx
 ================================================================================
@@ -1324,6 +1585,120 @@ function OffensiveSection({ offensiveData, player }) {
 export default OffensiveSection;
 
 
+File: src\components\OptimizedBackground.jsx
+================================================================================
+
+import React, { useState, useEffect } from 'react';
+
+const OptimizedBackground = () => {
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    // Preload the next larger image size after component mounts
+    const preloadLargerImage = new Image();
+    preloadLargerImage.src = '/images/background-lg.webp';
+  }, []);
+
+  return (
+    <>
+      {/* Placeholder while image loads */}
+      <div 
+        className={`absolute inset-0 bg-gradient-to-b from-gray-800 to-gray-900 transition-opacity duration-500 ${
+          loaded ? 'opacity-0' : 'opacity-100'
+        }`}
+      />
+
+      <picture>
+        {/* Desktop WebP variants */}
+        <source
+          srcSet="/images/background-lg.webp 1920w,
+                  /images/background-md.webp 1280w,
+                  /images/background-sm.webp 640w"
+          sizes="(min-width: 1536px) 1920px,
+                 (min-width: 1024px) 1280px,
+                 (min-width: 768px) 960px,
+                 640px"
+          type="image/webp"
+          media="(min-width: 768px)"
+        />
+
+        {/* Mobile WebP variants */}
+        <source
+          srcSet="/images/background-mobileLg.webp 1280w,
+                  /images/background-mobileMd.webp 960w,
+                  /images/background-mobileSm.webp 640w"
+          sizes="(min-width: 640px) 960px,
+                 640px"
+          type="image/webp"
+          media="(max-width: 767px)"
+        />
+
+        {/* Desktop JPEG fallback */}
+        <source
+          srcSet="/images/background-lg.jpg 1920w,
+                  /images/background-md.jpg 1280w,
+                  /images/background-sm.jpg 640w"
+          sizes="(min-width: 1536px) 1920px,
+                 (min-width: 1024px) 1280px,
+                 (min-width: 768px) 960px,
+                 640px"
+          type="image/jpeg"
+          media="(min-width: 768px)"
+        />
+
+        {/* Mobile JPEG fallback */}
+        <source
+          srcSet="/images/background-mobileLg.jpg 1280w,
+                  /images/background-mobileMd.jpg 960w,
+                  /images/background-mobileSm.jpg 640w"
+          sizes="(min-width: 640px) 960px,
+                 640px"
+          type="image/jpeg"
+          media="(max-width: 767px)"
+        />
+
+        <img
+          src="/images/background-sm.jpg"
+          alt="Background"
+          className={`absolute inset-0 w-full h-full object-cover opacity-60 transition-opacity duration-500 ${
+            loaded ? 'opacity-60' : 'opacity-0'
+          }`}
+          loading="eager"
+          fetchPriority="high"
+          width="1920"
+          height="1080"
+          onLoad={() => setLoaded(true)}
+          style={{
+            backgroundImage: `url('/images/background-placeholder.webp')`,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+          }}
+        />
+      </picture>
+
+      {/* Preload tags for critical images */}
+      <link
+        rel="preload"
+        as="image"
+        href="/images/background-sm.webp"
+        type="image/webp"
+        media="(max-width: 767px)"
+        fetchpriority="high"
+      />
+      <link
+        rel="preload"
+        as="image"
+        href="/images/background-md.webp"
+        type="image/webp"
+        media="(min-width: 768px)"
+        fetchpriority="high"
+      />
+    </>
+  );
+};
+
+export default OptimizedBackground;
+
 File: src\components\OverallScoreRing.jsx
 ================================================================================
 
@@ -1389,6 +1764,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import OverallScoreRing from './OverallScoreRing';
 import backgroundImage from '../assets/background.jpg';
+import OptimizedBackground from './OptimizedBackground';
 
 const ProfileHeader = ({ 
   name, 
@@ -1445,11 +1821,7 @@ const ProfileHeader = ({
   return (
     <div className="relative w-full h-56 md:h-64 lg:h-72 bg-gray-800 rounded-lg">
       {/* Background Image */}
-      <img
-        src={backgroundImage}
-        alt=""
-        className="absolute inset-0 w-full h-full object-cover opacity-60"
-      />
+      <OptimizedBackground />
       <div className="absolute inset-0 bg-black bg-opacity-40" />
 
       {/* Content */}
@@ -2484,13 +2856,13 @@ import { initializeApp } from "firebase/app";
 import { getAnalytics } from "firebase/analytics";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyC7rcVKPWvdvKVOUKPiX4j9av0rTByBVoE",
-  authDomain: "ultify-dash.firebaseapp.com",
-  projectId: "ultify-dash",
-  storageBucket: "ultify-dash.firebasestorage.app",
-  messagingSenderId: "408112418111",
-  appId: "1:408112418111:web:f766cebe2e2115125a978a",
-  measurementId: "G-NK04C3E3Q0"
+  apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
+  authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.REACT_APP_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.REACT_APP_FIREBASE_APP_ID,
+  measurementId: process.env.REACT_APP_FIREBASE_MEASUREMENT_ID
 };
 
 // Initialize Firebase
@@ -2516,15 +2888,14 @@ import {
 import { initializeApp } from 'firebase/app';
 import { sendPasswordResetEmail } from 'firebase/auth';
 
-
 const firebaseConfig = {
-  apiKey: "AIzaSyC7rcVKPWvdvKVOUKPiX4j9av0rTByBVoE",
-  authDomain: "ultify-dash.firebaseapp.com",
-  projectId: "ultify-dash",
-  storageBucket: "ultify-dash.firebasestorage.app",
-  messagingSenderId: "408112418111",
-  appId: "1:408112418111:web:f766cebe2e2115125a978a",
-  measurementId: "G-NK04C3E3Q0"
+  apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
+  authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.REACT_APP_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.REACT_APP_FIREBASE_APP_ID,
+  measurementId: process.env.REACT_APP_FIREBASE_MEASUREMENT_ID
 };
 
 // Initialize Firebase
@@ -3861,11 +4232,16 @@ module.exports = {
           400: '#d946ef',
         },
       },
+      transitionProperty: {
+        'opacity': 'opacity',
+      },
+      transitionDuration: {
+        '500': '500ms',
+      },
     },
   },
   plugins: [],
 };
-
 
 File: src\App.css
 ================================================================================
@@ -4741,12 +5117,29 @@ File: src\components\LoadingState.jsx
 
 // src/components/LoadingState.jsx
 export function LoadingState() {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-32 w-32 border-t-2 border-b-2 border-emerald-500"></div>
+  return (
+    <div className="min-h-screen w-full">
+      {/* Background placeholder */}
+      <div 
+        className="absolute inset-0 bg-gradient-to-b from-gray-800 to-gray-900 animate-pulse"
+        style={{
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+        }}
+      />
+      
+      {/* Loading spinner overlay */}
+      <div className="relative z-10 flex items-center justify-center min-h-screen">
+        <div className="flex flex-col items-center gap-4">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-emerald-500" />
+          <div className="text-gray-300 text-sm animate-pulse">
+            Loading...
+          </div>
+        </div>
       </div>
-    );
-  }
+    </div>
+  );
+}
 
 File: src\components\MiniRadial.jsx
 ================================================================================
@@ -4859,6 +5252,120 @@ function OffensiveSection({ offensiveData, player }) {
 export default OffensiveSection;
 
 
+File: src\components\OptimizedBackground.jsx
+================================================================================
+
+import React, { useState, useEffect } from 'react';
+
+const OptimizedBackground = () => {
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    // Preload the next larger image size after component mounts
+    const preloadLargerImage = new Image();
+    preloadLargerImage.src = '/images/background-lg.webp';
+  }, []);
+
+  return (
+    <>
+      {/* Placeholder while image loads */}
+      <div 
+        className={`absolute inset-0 bg-gradient-to-b from-gray-800 to-gray-900 transition-opacity duration-500 ${
+          loaded ? 'opacity-0' : 'opacity-100'
+        }`}
+      />
+
+      <picture>
+        {/* Desktop WebP variants */}
+        <source
+          srcSet="/images/background-lg.webp 1920w,
+                  /images/background-md.webp 1280w,
+                  /images/background-sm.webp 640w"
+          sizes="(min-width: 1536px) 1920px,
+                 (min-width: 1024px) 1280px,
+                 (min-width: 768px) 960px,
+                 640px"
+          type="image/webp"
+          media="(min-width: 768px)"
+        />
+
+        {/* Mobile WebP variants */}
+        <source
+          srcSet="/images/background-mobileLg.webp 1280w,
+                  /images/background-mobileMd.webp 960w,
+                  /images/background-mobileSm.webp 640w"
+          sizes="(min-width: 640px) 960px,
+                 640px"
+          type="image/webp"
+          media="(max-width: 767px)"
+        />
+
+        {/* Desktop JPEG fallback */}
+        <source
+          srcSet="/images/background-lg.jpg 1920w,
+                  /images/background-md.jpg 1280w,
+                  /images/background-sm.jpg 640w"
+          sizes="(min-width: 1536px) 1920px,
+                 (min-width: 1024px) 1280px,
+                 (min-width: 768px) 960px,
+                 640px"
+          type="image/jpeg"
+          media="(min-width: 768px)"
+        />
+
+        {/* Mobile JPEG fallback */}
+        <source
+          srcSet="/images/background-mobileLg.jpg 1280w,
+                  /images/background-mobileMd.jpg 960w,
+                  /images/background-mobileSm.jpg 640w"
+          sizes="(min-width: 640px) 960px,
+                 640px"
+          type="image/jpeg"
+          media="(max-width: 767px)"
+        />
+
+        <img
+          src="/images/background-sm.jpg"
+          alt="Background"
+          className={`absolute inset-0 w-full h-full object-cover opacity-60 transition-opacity duration-500 ${
+            loaded ? 'opacity-60' : 'opacity-0'
+          }`}
+          loading="eager"
+          fetchPriority="high"
+          width="1920"
+          height="1080"
+          onLoad={() => setLoaded(true)}
+          style={{
+            backgroundImage: `url('/images/background-placeholder.webp')`,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+          }}
+        />
+      </picture>
+
+      {/* Preload tags for critical images */}
+      <link
+        rel="preload"
+        as="image"
+        href="/images/background-sm.webp"
+        type="image/webp"
+        media="(max-width: 767px)"
+        fetchpriority="high"
+      />
+      <link
+        rel="preload"
+        as="image"
+        href="/images/background-md.webp"
+        type="image/webp"
+        media="(min-width: 768px)"
+        fetchpriority="high"
+      />
+    </>
+  );
+};
+
+export default OptimizedBackground;
+
 File: src\components\OverallScoreRing.jsx
 ================================================================================
 
@@ -4924,6 +5431,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import OverallScoreRing from './OverallScoreRing';
 import backgroundImage from '../assets/background.jpg';
+import OptimizedBackground from './OptimizedBackground';
 
 const ProfileHeader = ({ 
   name, 
@@ -4980,11 +5488,7 @@ const ProfileHeader = ({
   return (
     <div className="relative w-full h-56 md:h-64 lg:h-72 bg-gray-800 rounded-lg">
       {/* Background Image */}
-      <img
-        src={backgroundImage}
-        alt=""
-        className="absolute inset-0 w-full h-full object-cover opacity-60"
-      />
+      <OptimizedBackground />
       <div className="absolute inset-0 bg-black bg-opacity-40" />
 
       {/* Content */}
@@ -6019,13 +6523,13 @@ import { initializeApp } from "firebase/app";
 import { getAnalytics } from "firebase/analytics";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyC7rcVKPWvdvKVOUKPiX4j9av0rTByBVoE",
-  authDomain: "ultify-dash.firebaseapp.com",
-  projectId: "ultify-dash",
-  storageBucket: "ultify-dash.firebasestorage.app",
-  messagingSenderId: "408112418111",
-  appId: "1:408112418111:web:f766cebe2e2115125a978a",
-  measurementId: "G-NK04C3E3Q0"
+  apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
+  authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.REACT_APP_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.REACT_APP_FIREBASE_APP_ID,
+  measurementId: process.env.REACT_APP_FIREBASE_MEASUREMENT_ID
 };
 
 // Initialize Firebase
@@ -6051,15 +6555,14 @@ import {
 import { initializeApp } from 'firebase/app';
 import { sendPasswordResetEmail } from 'firebase/auth';
 
-
 const firebaseConfig = {
-  apiKey: "AIzaSyC7rcVKPWvdvKVOUKPiX4j9av0rTByBVoE",
-  authDomain: "ultify-dash.firebaseapp.com",
-  projectId: "ultify-dash",
-  storageBucket: "ultify-dash.firebasestorage.app",
-  messagingSenderId: "408112418111",
-  appId: "1:408112418111:web:f766cebe2e2115125a978a",
-  measurementId: "G-NK04C3E3Q0"
+  apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
+  authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.REACT_APP_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.REACT_APP_FIREBASE_APP_ID,
+  measurementId: process.env.REACT_APP_FIREBASE_MEASUREMENT_ID
 };
 
 // Initialize Firebase

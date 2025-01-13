@@ -1,21 +1,37 @@
-// src/App.jsx
+import { lazy, Suspense } from 'react';
 import { Routes, Route } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
-import ProtectedRoute from './components/auth/ProtectedRoute';
-import LoginPage from './components/auth/LoginPage';
-import Dashboard from './Dashboard'; // Rename your current App content to Dashboard
+import { LoadingState } from './components/LoadingState';
+
+// Lazy load components
+const LoginPage = lazy(() => import('./components/auth/LoginPage'));
+const Dashboard = lazy(() => import('./Dashboard'));
+const ProtectedRoute = lazy(() => import('./components/auth/ProtectedRoute'));
 
 function App() {
   return (
     <AuthProvider>
       <Routes>
-        <Route path="/login" element={<LoginPage />} />
+        <Route 
+          path="/login" 
+          element={
+            <Suspense fallback={
+              <div className="min-h-screen bg-gray-900 flex items-center justify-center">
+                <h1 className="text-xl text-gray-200">Welcome back</h1>
+              </div>
+            }>
+              <LoginPage />
+            </Suspense>
+          } 
+        />
         <Route
           path="/*"
           element={
-            <ProtectedRoute>
-              <Dashboard />
-            </ProtectedRoute>
+            <Suspense fallback={<LoadingState />}>
+              <ProtectedRoute>
+                <Dashboard />
+              </ProtectedRoute>
+            </Suspense>
           }
         />
       </Routes>

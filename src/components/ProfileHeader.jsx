@@ -61,11 +61,7 @@ const ProfileHeader = ({
   return (
     <div className="relative w-full h-56 md:h-64 lg:h-72 bg-gray-800 rounded-lg">
       {/* Background Image */}
-      <img
-        src={backgroundImage}
-        alt=""
-        className="absolute inset-0 w-full h-full object-cover opacity-60"
-      />
+      <OptimizedBackground />
       <div className="absolute inset-0 bg-black bg-opacity-40" />
 
       {/* Content */}

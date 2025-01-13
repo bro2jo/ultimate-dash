@@ -2,23 +2,117 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <link rel="icon" type="image/svg+xml" href="favicon.svg">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&family=Oswald:wght@400;700&display=swap" rel="stylesheet">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="theme-color" content="#000000" />
+    <meta name="description" content="Visualize and track your Ultimate Frisbee abilities with Ultify." />
     
-    <!-- Single Manifest Link -->
+    <!-- Preconnect to critical origins -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin>
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="preconnect" href="https://api.ultify.app">
+    
+    <title>Ultify | Visualize Your Game</title>
+
+    <!-- Critical CSS - Expanded for login page LCP -->
+    <style>
+      /* Minimal styles needed for initial render */
+      body {
+        margin: 0;
+        font-family: 'Inter', system-ui, -apple-system, sans-serif;
+        -webkit-font-smoothing: antialiased;
+        background-color: rgb(17, 24, 39);
+      }
+      
+      /* Login page critical styles */
+      .min-h-screen { min-height: 100vh }
+      .flex { display: flex }
+      .flex-col { flex-direction: column }
+      .items-center { align-items: center }
+      .justify-center { justify-content: center }
+      .text-center { text-align: center }
+      .text-2xl { font-size: 1.5rem }
+      .text-sm { font-size: 0.875rem }
+      .font-bold { font-weight: 700 }
+      .text-white { color: rgb(255, 255, 255) }
+      .text-gray-400 { color: rgb(156, 163, 175) }
+      .mt-2 { margin-top: 0.5rem }
+      .mb-8 { margin-bottom: 2rem }
+      .p-4 { padding: 1rem }
+      
+      /* Original critical styles */
+      .absolute { position: absolute }
+      .inset-0 { top: 0; right: 0; bottom: 0; left: 0 }
+      .w-full { width: 100% }
+      .h-full { height: 100% }
+      .object-cover { object-fit: cover }
+      .opacity-60 { opacity: 0.6 }
+      .bg-gray-900 { background-color: rgb(17, 24, 39) }
+    </style>
+
+    <!-- Optimized Font Loading -->
+    <link 
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" 
+      rel="preload"
+      as="style"
+      onload="this.onload=null;this.rel='stylesheet'"
+    />
+    <!-- Font fallback -->
+    <noscript>
+      <link 
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+        rel="stylesheet"
+      />
+    </noscript>
+
+    <!-- Font display declaration -->
+    <style>
+      @font-face {
+        font-family: 'Inter';
+        font-style: normal;
+        font-weight: 400;
+        font-display: swap;
+        src: local('Inter'), url(https://fonts.gstatic.com/s/inter/v13/UcC73FwrK3iLTeHuS_fvQtMwCp50KnMa1ZL7.woff2) format('woff2');
+      }
+    </style>
+
+    <!-- Preload Critical Images with priority hints -->
+    <link 
+      rel="preload" 
+      as="image" 
+      href="/images/background-placeholder.webp" 
+      type="image/webp"
+      fetchpriority="high"
+    />
+    <link 
+      rel="preload" 
+      as="image" 
+      href="/images/background-sm.webp" 
+      type="image/webp" 
+      media="(max-width: 767px)" 
+      fetchpriority="high"
+    />
+    <link 
+      rel="preload" 
+      as="image" 
+      href="/images/background-md.webp" 
+      type="image/webp" 
+      media="(min-width: 768px)" 
+      fetchpriority="high"
+    />
+
+    <!-- Favicons and Icons -->
+    <link rel="icon" type="image/svg+xml" href="favicon.svg">
+    <link rel="apple-touch-icon" href="icons/icon-192x192.png" />
     <link rel="manifest" href="/manifest.json" />
 
-    <!-- Single Viewport Meta Tag -->
-    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-    
-    <meta name="theme-color" content="#000000" />
-    <meta
-      name="description"
-      content="Visualize and track your Ultimate Frisbee abilities with Ultify."
-    />
-    <link rel="apple-touch-icon" href="icons/icon-192x192.png" />
-    
-    <!-- Open Graph -->
+    <!-- PWA -->
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="application-name" content="Ultify">
+    <meta name="apple-mobile-web-app-title" content="Ultify">
+    <meta name="msapplication-starturl" content="/">
+
+    <!-- Deferred metadata -->
     <meta property="og:title" content="Ultify | Visualize Your Game">
     <meta property="og:description" content="Visualize and track your Ultimate Frisbee abilities with Ultify.">
     <meta property="og:image" content="https://ultify.app/images/preview-image.png">
@@ -26,25 +120,22 @@
     <meta property="og:type" content="website">
     <meta property="og:image:width" content="1200">
     <meta property="og:image:height" content="630">
-
-    <!-- Twitter Card -->
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="Ultify | Visualize Your Game">
     <meta name="twitter:description" content="Visualize and track your Ultimate Frisbee abilities with Ultify.">
     <meta name="twitter:image" content="https://ultify.app/images/preview-image.png">
     <meta name="twitter:url" content="https://ultify.app">
-
-    <!-- PWA Meta Tags -->
-    <meta name="mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="application-name" content="Ultify">
-    <meta name="apple-mobile-web-app-title" content="Ultify">
-    <meta name="msapplication-starturl" content="/">
-
-    <title>Ultify | Visualize Your Game</title>
   </head>
   <body>
     <noscript>You need to enable JavaScript to run this app.</noscript>
-    <div id="root"></div>
+    <!-- Initial Content Shell for Login Page -->
+    <div id="root">
+      <div class="min-h-screen bg-gray-900 flex items-center justify-center">
+        <div class="text-center mb-8">
+          <h2 class="text-2xl font-bold text-white">Welcome back</h2>
+          <p class="mt-2 text-gray-400 text-sm">Great to see you again! Please enter your details.</p>
+        </div>
+      </div>
+    </div>
   </body>
 </html>
