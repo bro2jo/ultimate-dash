@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import OverallScoreRing from './OverallScoreRing';
 import backgroundImage from '../assets/background.jpg';
+import OptimizedBackground from './OptimizedBackground';
 
 const ProfileHeader = ({ 
   name, 
