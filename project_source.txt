@@ -1,6 +1,6 @@
 Project: performance-app
 Version: 0.1.0
-Generated: 2025-01-12T20:33:11.721Z
+Generated: 2025-01-12T23:40:35.390Z
 ================================================================================
 
 File: concat-files.js
@@ -116,9 +116,11 @@ File: package.json
   "version": "0.1.0",
   "private": true,
   "dependencies": {
+    "@firebase/auth": "^1.8.1",
     "@heroicons/react": "^2.2.0",
     "chart.js": "^4.4.7",
     "cra-template": "1.2.0",
+    "firebase": "^11.1.0",
     "framer-motion": "^11.16.4",
     "lucide-react": "^0.469.0",
     "react": "^19.0.0",
@@ -389,296 +391,31 @@ File: src\App.jsx
 ================================================================================
 
 // src/App.jsx
-
-import React, { useState, useEffect } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
-import mockData from './data/mockData';
-import ProfileHeader from './components/ProfileHeader';
-import CategorySection from './components/CategorySection';
-import RadarChart from './components/RadarChart';
-import OffensiveSection from './components/OffensiveSection';
-import RadialTabs from './components/RadialTabs';
-import { computeCategoryAverages, computeOverallScore } from './utils/helpers';
-import HomeSection from './components/HomeSection';  // Add this import if not already there
-import { SyncManager } from './utils/sync';
-import { InstallPrompt } from './components/InstallPrompt';
-import RoadmapModal from './components/RoadmapModal';
-import FloatingActionButton from './components/FloatingActionButton';
-
-import './index.css';
-
-/* -------------------------------------
-   3) MAIN APP
--------------------------------------- */
+import { Routes, Route } from 'react-router-dom';
+import { AuthProvider } from './contexts/AuthContext';
+import ProtectedRoute from './components/auth/ProtectedRoute';
+import LoginPage from './components/auth/LoginPage';
+import Dashboard from './Dashboard'; // Rename your current App content to Dashboard
 
 function App() {
-  const location = useLocation();
-  const navigate = useNavigate();
-  const [isOnline, setIsOnline] = useState(navigator.onLine);
-  const [syncPending, setSyncPending] = useState(false);
-  const [isRoadmapOpen, setRoadmapOpen] = useState(false);
-
-  // 3.1) Manage Selected Athlete
-  const [selectedAthleteId, setSelectedAthleteId] = useState(mockData[0].id);
-
-  // 3.2) Automatically select athlete based on URL parameters
-  useEffect(() => {
-    const searchParams = new URLSearchParams(location.search);
-    const athleteIdFromUrl = searchParams.get('id');      // ?id=3
-    const athleteNameFromUrl = searchParams.get('name');  // ?name=Jonathan
-
-    if (athleteIdFromUrl) {
-      const athleteId = parseInt(athleteIdFromUrl, 10);
-      const athleteExists = mockData.some(a => a.id === athleteId);
-      if (athleteExists) {
-        setSelectedAthleteId(athleteId);
-      } else {
-        // If athlete ID doesn't exist, navigate to default or show an error
-        navigate('/', { replace: true });
-      }
-    }
-  }, [location.search, navigate]);
-
-  // Find the selected athlete from mockData
-  const selectedAthlete = mockData.find(athlete => athlete.id === selectedAthleteId);
-  // 3.4) Group data into categories
-  const getCategoryData = (p) => ({
-    physical: [
-      { key: 'speed_explosiveness', label: 'Speed & Explosiveness' },
-      { key: 'endurance', label: 'Endurance' },
-      { key: 'vertical_leap', label: 'Vertical Leap' },
-      { key: 'change_of_direction', label: 'Change of Direction' },
-      { key: 'boxing_out', label: 'Boxing Out' },
-      { key: 'laying_out', label: 'Laying Out' },
-      { key: 'recovery', label: 'Recovery' },
-      { key: 'flexibility_mobility', label: 'Flexibility & Mobility' },
-      { key: 'injury_prevention', label: 'Injury Prevention' },
-    ],
-    offensive: {
-      cutting: [
-        { key: 'angles', label: 'Angles' },
-        { key: 'fakes_footwork', label: 'Fakes & Footwork' },
-        { key: 'timing_field_vision', label: 'Timing & Field Vision' },
-        { key: 'decisiveness', label: 'Decisiveness' },
-        { key: 'catching', label: 'Catching' },
-        { key: 'flow_awareness', label: 'Flow Awareness' },
-        { key: 'isolation_cutting', label: 'Isolation Cutting' },
-        { key: 'continuation_cutting', label: 'Continuation Cutting' },
-      ],
-      handling: [
-        { key: 'handler_movement', label: 'Handler Movement' },
-        { key: 'poise_with_disc', label: 'Poise w/ Disc' },
-        { key: 'breaking_the_mark', label: 'Breaking the Mark' },
-        { key: 'resetting_from_trap_sideline', label: 'Reset from Trap' },
-        { key: 'decision_making_vision', label: 'Decision Making & Vision' },
-        { key: 'offensive_pattern_recognition', label: 'Pattern Recognition' },
-        { key: 'throw_and_go', label: 'Throw & Go' },
-      ],
-      throwing: {
-        backhand: [
-          { key: 'backhand_power', label: 'Backhand Power' },
-          { key: 'backhand_accuracy', label: 'Backhand Accuracy' },
-          { key: 'backhand_quick_release', label: 'Backhand Quick Release' },
-          { key: 'backhand_release_variations', label: 'Backhand Variations' },
-          { key: 'backhand_against_wind', label: 'Backhand vs Wind' },
-          { key: 'backhand_against_difficult_marks', label: 'Backhand vs Difficult Marks' },
-          { key: 'backhand_tempo_control', label: 'Backhand Tempo Control' },
-        ],
-        forehand: [
-          { key: 'forehand_power', label: 'Forehand Power' },
-          { key: 'forehand_accuracy', label: 'Forehand Accuracy' },
-          { key: 'forehand_quick_release', label: 'Forehand Quick Release' },
-          { key: 'forehand_release_variations', label: 'Forehand Variations' },
-          { key: 'forehand_against_wind', label: 'Forehand vs Wind' },
-          { key: 'forehand_against_difficult_marks', label: 'Forehand vs Difficult Marks' },
-          { key: 'forehand_tempo_control', label: 'Forehand Tempo Control' },
-        ],
-        specialty: [
-          { key: 'specialty_power', label: 'Specialty Power' },
-          { key: 'specialty_accuracy', label: 'Specialty Accuracy' },
-          { key: 'specialty_quick_release', label: 'Specialty Quick Release' },
-          { key: 'specialty_release_variations', label: 'Specialty Variations' },
-          { key: 'specialty_against_wind', label: 'Specialty vs Wind' },
-          { key: 'specialty_against_difficult_marks', label: 'Specialty vs Difficult Marks' },
-          { key: 'specialty_tempo_control', label: 'Specialty Tempo Control' },
-        ],
-        hucking: [
-          { key: 'hucking_confidence', label: 'Hucking Confidence' },
-          { key: 'hucking_shape_control', label: 'Hucking Shape Control' },
-          { key: 'hucking_tempo_control', label: 'Hucking Tempo Control' },
-          { key: 'hucking_placement', label: 'Hucking Placement' },
-        ],
-      },
-    },
-    defensive: [
-      { key: 'normal_marking', label: 'Normal Marking' },
-      { key: 'sideline_trap_marking', label: 'Sideline Trap Marking' },
-      { key: 'downfield_defending', label: 'Downfield Defending' },
-      { key: 'handler_defending', label: 'Handler Defending' },
-      { key: 'defensive_pattern_recognition', label: 'Pattern Recognition' },
-      { key: 'help_defense', label: 'Help Defense' },
-      { key: 'switching_on_defense', label: 'Switching on Defense' },
-      { key: 'zone_defense', label: 'Zone Defense' },
-      { key: 'defensive_mental_fortitude', label: 'Defensive Mental Fortitude' },
-    ],
-    mental: [
-      { key: 'mental_game', label: 'Mental Game' },
-      { key: 'feedback_implementation', label: 'Feedback Implementation' },
-      { key: 'defensive_strategy', label: 'Defensive Team Strategy' },
-      { key: 'offensive_strategy', label: 'Offensive Team Strategy' },
-    ],
-  });
-
-  // 3.4) We'll keep track of the active tab, default to "home"
-  const [activeTab, setActiveTab] = useState('home');
-
-  // 3.5) Precompute the main category averages for radial tab display
-  const [averages, setAverages] = useState({});
-  useEffect(() => {
-    if (selectedAthlete) {
-      const newAvg = computeCategoryAverages(selectedAthlete);
-      setAverages(newAvg);
-    }
-  }, [selectedAthlete]);
-
-  // 3.6) Radar example for “Throw Comparison” inside Offensive
-  const radarLabels = [
-    'Backhand Power',
-    'Forehand Power',
-    'Specialty Power',
-    'Backhand Accuracy',
-    'Forehand Accuracy',
-    'Specialty Accuracy',
-  ];
-  const radarDataValues = [
-    selectedAthlete.skills.backhand_power,
-    selectedAthlete.skills.forehand_power,
-    selectedAthlete.skills.specialty_power,
-    selectedAthlete.skills.backhand_accuracy,
-    selectedAthlete.skills.forehand_accuracy,
-    selectedAthlete.skills.specialty_accuracy,
-  ];
-
-  useEffect(() => {
-    const handleOnline = () => {
-      setIsOnline(true);
-      SyncManager.processSyncQueue();
-    };
-    const handleOffline = () => setIsOnline(false);
-
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
-
-    return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
-    };
-  }, []);
-
-  /* -------------------------------------
-     RENDER
-  -------------------------------------- */
   return (
-    
-    <div className="min-h-screen bg-gray-900 text-gray-100 flex flex-col">
-            {!isOnline && (
-        <div className="bg-yellow-600 text-white px-4 py-2 text-center">
-          You're offline. Some features may be limited.
-        </div>
-      )}
-      <InstallPrompt />
-      {/** 1) Profile Header at the top */}
-      <ProfileHeader
-        name={selectedAthlete.metadata.name}
-        email={selectedAthlete.metadata.email}
-        overallScore={
-          activeTab === 'home'
-            ? computeOverallScore(selectedAthlete)
-            : averages[activeTab] || 0
-        }
-        athletes={mockData}
-        selectedAthleteId={selectedAthleteId}
-        onSelectAthlete={(id) => setSelectedAthleteId(id)} // Pass a handler
-      />
-
-      {/** 3) The radial nav row (icons + radial) for Home, Physical, Offensive, Defensive, Mental */}
-      <RadialTabs
-        activeTab={activeTab}
-        onChangeTab={setActiveTab}
-        averages={averages}
-      />
-
-      {/** 4) Scrollable content below the radial nav */}
-      <div className="flex-1 overflow-auto px-4 pb-8 mt-4">
-        {/** HOME (Dashboard) */}
-        {activeTab === 'home' && (
-          <HomeSection player={selectedAthlete} />
-        )}
-
-        {/** PHYSICAL */}
-        {activeTab === 'physical' && (
-          <CategorySection
-            title="Physical Attributes"
-            skills={getCategoryData(selectedAthlete).physical}
-            player={selectedAthlete.skills}
-          />
-        )}
-
-        {/** OFFENSIVE */}
-        {activeTab === 'offensive' && (
-          <>
-            <OffensiveSection
-              offensiveData={getCategoryData(selectedAthlete).offensive}
-              player={selectedAthlete.skills}
-            />
-            {/* Example: A Throw Comparison Radar Chart */}
-            <div className="mt-6">
-              <h2 className="text-xl font-semibold mb-2 text-gray-100">
-                Throw Comparison
-              </h2>
-              <RadarChart labels={radarLabels} dataValues={radarDataValues} />
-            </div>
-          </>
-        )}
-
-        {/** DEFENSIVE */}
-        {activeTab === 'defensive' && (
-          <CategorySection
-            title="Defensive Skills"
-            skills={getCategoryData(selectedAthlete).defensive}
-            player={selectedAthlete.skills}
-          />
-        )}
-
-        {/** MENTAL */}
-        {activeTab === 'mental' && (
-          <CategorySection
-            title="Mental & Recovery"
-            skills={getCategoryData(selectedAthlete).mental}
-            player={selectedAthlete.skills}
-          />
-        )}
-
-        {/* Roadmap Modal */}
-        <RoadmapModal 
-        isOpen={isRoadmapOpen}
-        onClose={() => setRoadmapOpen(false)}
-        player={selectedAthlete}
-      />
-          <FloatingActionButton onClick={() => setRoadmapOpen(true)} />
-    
-    <RoadmapModal 
-      isOpen={isRoadmapOpen}
-      onClose={() => setRoadmapOpen(false)}
-      player={selectedAthlete}
-    />
-      </div>
-    </div>
+    <AuthProvider>
+      <Routes>
+        <Route path="/login" element={<LoginPage />} />
+        <Route
+          path="/*"
+          element={
+            <ProtectedRoute>
+              <Dashboard />
+            </ProtectedRoute>
+          }
+        />
+      </Routes>
+    </AuthProvider>
   );
 }
 
 export default App;
-
 
 File: src\App.test.js
 ================================================================================
@@ -778,6 +515,332 @@ const AthleteDropdown = ({ athletes, selectedAthleteId, onSelectAthlete }) => {
 
 export default AthleteDropdown;
 
+
+File: src\components\auth\LoginPage.jsx
+================================================================================
+
+import React, { useState, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../../contexts/AuthContext';
+import { motion, AnimatePresence } from 'framer-motion';
+import { 
+  Mail, 
+  Lock, 
+  AlertCircle, 
+  Loader2, 
+  ArrowRight,
+  CheckCircle 
+} from 'lucide-react';
+
+export default function LoginPage() {
+  const [isLogin, setIsLogin] = useState(true);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [isResetPassword, setIsResetPassword] = useState(false);
+  const navigate = useNavigate();
+  const { login, signup, loginWithGoogle, resetPassword } = useAuth();
+
+  // Function to handle user-friendly error messages
+  const getErrorMessage = useCallback((error) => {
+    switch (error.code) {
+      case 'auth/invalid-credential':
+        return 'Invalid email or password. Please check your credentials and try again.';
+      case 'auth/wrong-password':
+        return 'Incorrect password. Please try again.';
+      case 'auth/user-not-found':
+        return 'No account found with this email.';
+      case 'auth/email-already-in-use':
+        return 'An account already exists with this email.';
+      case 'auth/weak-password':
+        return 'Password should be at least 6 characters.';
+      case 'auth/invalid-email':
+        return 'Please enter a valid email address.';
+      case 'auth/too-many-requests':
+        return 'Too many attempts. Please try again later.';
+      case 'auth/network-request-failed':
+        return 'Network error. Please check your internet connection and try again.';
+      case 'auth/popup-closed-by-user':
+        return 'Sign in was cancelled. Please try again.';
+      case 'auth/cancelled-popup-request':
+        return 'Sign in process was interrupted. Please try again.';
+      case 'auth/operation-not-allowed':
+        return 'This sign in method is not enabled. Please try another method.';
+      case 'auth/user-disabled':
+        return 'This account has been disabled. Please contact support for assistance.';
+      default:
+        return error.message || 'An error occurred. Please try again.';
+    }
+}, []);
+
+  const clearMessages = useCallback(() => {
+    setError('');
+    setSuccessMessage('');
+  }, []);
+
+  const resetForm = useCallback(() => {
+    setEmail('');
+    setPassword('');
+    clearMessages();
+  }, [clearMessages]);
+
+  const handleAuthModeChange = useCallback((mode) => {
+    if (mode === 'reset') {
+      setIsResetPassword(true);
+      setIsLogin(true);
+    } else {
+      setIsResetPassword(false);
+      setIsLogin(mode === 'login');
+    }
+    clearMessages();
+  }, [clearMessages]);
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    clearMessages();
+    setLoading(true);
+
+    try {
+      if (isResetPassword) {
+        await resetPassword(email);
+        setSuccessMessage('Password reset email sent! Please check your inbox.');
+        setIsResetPassword(false);
+      } else if (isLogin) {
+        await login(email, password);
+        resetForm();
+        navigate('/');
+      } else {
+        await signup(email, password);
+        resetForm();
+        navigate('/');
+      }
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleGoogleLogin() {
+    clearMessages();
+    setLoading(true);
+
+    try {
+      await loginWithGoogle();
+      resetForm();
+      navigate('/');
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="min-h-screen bg-gradient-to-b from-gray-900 to-gray-800 flex flex-col items-center justify-center p-4">
+      <div className="w-full max-w-md">
+        {/* Logo/Brand Section */}
+        <div className="text-center mb-8">
+          <motion.div
+            initial={{ scale: 0.8, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ duration: 0.3 }}
+          >
+            <div className="w-16 h-16 mx-auto mb-4 flex items-center justify-center">
+              <img src="/favicon.svg" alt="Logo" className="w-full h-full" />
+            </div>
+          </motion.div>
+          <h2 className="text-2xl md:text-3xl font-bold text-white">
+            {isResetPassword 
+              ? 'Reset Password'
+              : isLogin 
+                ? 'Welcome back' 
+                : 'Create your account'}
+          </h2>
+          <p className="mt-2 text-gray-400 text-sm">
+            {isResetPassword
+              ? 'Enter your email and we will send you reset instructions.'
+              : isLogin 
+                ? 'Great to see you again! Please enter your details.'
+                : 'Start your performance tracking journey today.'}
+          </p>
+        </div>
+
+        {/* Main Form */}
+        <motion.div
+          initial={{ y: 20, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ duration: 0.4, delay: 0.1 }}
+          className="bg-gray-800/50 backdrop-blur-xl rounded-2xl p-6 md:p-8 shadow-xl border border-gray-700/50"
+        >
+          <AnimatePresence mode="wait">
+            {error && (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/50 flex items-center gap-2"
+              >
+                <AlertCircle className="h-4 w-4 text-red-500 flex-shrink-0" />
+                <p className="text-sm text-red-500">{error}</p>
+              </motion.div>
+            )}
+            {successMessage && (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="mb-4 p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/50 flex items-center gap-2"
+              >
+                <CheckCircle className="h-4 w-4 text-emerald-500 flex-shrink-0" />
+                <p className="text-sm text-emerald-500">{successMessage}</p>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-1">
+              <label htmlFor="email" className="text-sm font-medium text-gray-300">
+                Email
+              </label>
+              <div className="relative">
+                <input
+                  id="email"
+                  type="email"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="w-full px-4 py-2.5 rounded-lg bg-gray-900/50 border border-gray-700 text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 transition-colors"
+                  placeholder="you@example.com"
+                />
+                <Mail className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-500" />
+              </div>
+            </div>
+
+            {!isResetPassword && (
+              <div className="space-y-1">
+                <div className="flex items-center justify-between">
+                  <label htmlFor="password" className="text-sm font-medium text-gray-300">
+                    Password
+                  </label>
+                  {isLogin && (
+                    <button
+                      type="button"
+                      onClick={() => handleAuthModeChange('reset')}
+                      className="text-sm text-emerald-400 hover:text-emerald-300 transition-colors"
+                    >
+                      Forgot password?
+                    </button>
+                  )}
+                </div>
+                <div className="relative">
+                  <input
+                    id="password"
+                    type="password"
+                    required={!isResetPassword}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="w-full px-4 py-2.5 rounded-lg bg-gray-900/50 border border-gray-700 text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 transition-colors"
+                    placeholder="••••••••"
+                  />
+                  <Lock className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-500" />
+                </div>
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-emerald-500 hover:bg-emerald-600 text-white py-2.5 rounded-lg font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            >
+              {loading ? (
+                <Loader2 className="w-5 h-5 animate-spin" />
+              ) : (
+                <>
+                  {isResetPassword 
+                    ? 'Send reset instructions' 
+                    : isLogin 
+                      ? 'Sign in' 
+                      : 'Create account'}
+                  <ArrowRight className="w-5 h-5" />
+                </>
+              )}
+            </button>
+          </form>
+
+          {!isResetPassword && (
+            <>
+              <div className="mt-6">
+                <div className="relative">
+                  <div className="absolute inset-0 flex items-center">
+                    <div className="w-full border-t border-gray-700"></div>
+                  </div>
+                  <div className="relative flex justify-center text-sm">
+                    <span className="px-2 bg-gray-800/50 text-gray-400">
+                      Or continue with
+                    </span>
+                  </div>
+                </div>
+
+                <button
+                  onClick={handleGoogleLogin}
+                  disabled={loading}
+                  className="mt-4 w-full flex items-center justify-center gap-3 px-4 py-2.5 border border-gray-700 rounded-lg text-gray-300 hover:bg-gray-700/50 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500"
+                >
+                  <svg className="h-5 w-5" viewBox="0 0 24 24">
+                    <path
+                      fill="currentColor"
+                      d="M12.545,10.239v3.821h5.445c-0.712,2.315-2.647,3.972-5.445,3.972c-3.332,0-6.033-2.701-6.033-6.032s2.701-6.032,6.033-6.032c1.498,0,2.866,0.549,3.921,1.453l2.814-2.814C17.503,2.988,15.139,2,12.545,2C7.021,2,2.543,6.477,2.543,12s4.478,10,10.002,10c8.396,0,10.249-7.85,9.426-11.748L12.545,10.239z"
+                    />
+                  </svg>
+                  Google
+                </button>
+              </div>
+            </>
+          )}
+
+          <div className="mt-6 text-center space-y-3">
+            {!isResetPassword && (
+              <button
+                onClick={() => handleAuthModeChange(isLogin ? 'signup' : 'login')}
+                className="text-sm text-emerald-400 hover:text-emerald-300 transition-colors"
+              >
+                {isLogin ? "Don't have an account? Sign up" : 'Already have an account? Sign in'}
+              </button>
+            )}
+            {isResetPassword && (
+              <button
+                onClick={() => handleAuthModeChange('login')}
+                className="block w-full text-sm text-gray-400 hover:text-gray-300 transition-colors"
+              >
+                Return to login
+              </button>
+            )}
+          </div>
+        </motion.div>
+      </div>
+    </div>
+  );
+}
+
+File: src\components\auth\ProtectedRoute.jsx
+================================================================================
+
+// src/components/auth/ProtectedRoute.jsx
+import { Navigate } from 'react-router-dom';
+import { useAuth } from '../../contexts/AuthContext';
+
+export default function ProtectedRoute({ children }) {
+  const { user } = useAuth();
+  
+  if (!user) {
+    return <Navigate to="/login" replace />;
+  }
+
+  return children;
+}
 
 File: src\components\CategorySection.jsx
 ================================================================================
@@ -997,35 +1060,125 @@ import React, { useState, useEffect } from 'react';
 
 export function InstallPrompt() {
   const [installPrompt, setInstallPrompt] = useState(null);
+  const [debugInfo, setDebugInfo] = useState({ 
+    isStandalone: false, 
+    hasShownPrompt: false,
+    promptEventReceived: false 
+  });
 
   useEffect(() => {
-    const handler = (e) => {
+    console.log('[InstallPrompt] Component mounted');
+
+    // Check if running in standalone mode
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches 
+      || (window.navigator.standalone) 
+      || document.referrer.includes('android-app://');
+      
+    console.log('[InstallPrompt] Is standalone:', isStandalone);
+
+    const hasShownPrompt = localStorage.getItem('installPromptShown');
+    console.log('[InstallPrompt] Previously shown:', hasShownPrompt);
+
+    setDebugInfo(prev => ({
+      ...prev,
+      isStandalone,
+      hasShownPrompt: !!hasShownPrompt
+    }));
+
+    // Handle the beforeinstallprompt event
+    const handleBeforeInstallPrompt = (e) => {
+      console.log('[InstallPrompt] beforeinstallprompt event fired', e);
       e.preventDefault();
       setInstallPrompt(e);
+      setDebugInfo(prev => ({ ...prev, promptEventReceived: true }));
     };
 
-    window.addEventListener('beforeinstallprompt', handler);
-    return () => window.removeEventListener('beforeinstallprompt', handler);
+    // The beforeinstallprompt event may have fired before our listener
+    // was registered. Check if it's stored in window
+    if (window.deferredPrompt) {
+      console.log('[InstallPrompt] Found existing deferredPrompt');
+      handleBeforeInstallPrompt(window.deferredPrompt);
+    }
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+
+    // Check if app was installed
+    window.addEventListener('appinstalled', (e) => {
+      console.log('[InstallPrompt] App was installed', e);
+      localStorage.setItem('appInstalled', 'true');
+      setInstallPrompt(null);
+    });
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    };
   }, []);
 
-  if (!installPrompt) return null;
+  // Log state changes
+  useEffect(() => {
+    console.log('[InstallPrompt] State updated:', {
+      hasPrompt: !!installPrompt,
+      debugInfo
+    });
+  }, [installPrompt, debugInfo]);
+
+  const handleInstall = async () => {
+    if (!installPrompt) {
+      console.log('[InstallPrompt] No install prompt available');
+      return;
+    }
+
+    try {
+      console.log('[InstallPrompt] Triggering install prompt');
+      const result = await installPrompt.prompt();
+      console.log('[InstallPrompt] Install prompt result:', result);
+      setInstallPrompt(null);
+    } catch (error) {
+      console.error('[InstallPrompt] Error installing app:', error);
+    }
+  };
+
+  const handleDismiss = () => {
+    console.log('[InstallPrompt] Prompt dismissed');
+    setInstallPrompt(null);
+    localStorage.setItem('installPromptDismissed', Date.now().toString());
+  };
+
+  // Early return conditions
+  if (debugInfo.isStandalone) {
+    console.log('[InstallPrompt] App is installed, not showing prompt');
+    return null;
+  }
+
+  if (!installPrompt) {
+    console.log('[InstallPrompt] No prompt available, not showing UI');
+    return null;
+  }
 
   return (
-    <div className="fixed bottom-4 left-4 right-4 bg-gray-800 p-4 rounded-lg shadow-lg">
-      <p className="text-gray-100 mb-2">Install Ultify Performance Tracker?</p>
-      <div className="flex space-x-2">
-        <button
-          onClick={() => installPrompt.prompt()}
-          className="bg-emerald-500 text-white px-4 py-2 rounded"
-        >
-          Install
-        </button>
-        <button
-          onClick={() => setInstallPrompt(null)}
-          className="bg-gray-600 text-white px-4 py-2 rounded"
-        >
-          Not now
-        </button>
+    <div className="fixed bottom-4 left-4 right-4 md:left-auto md:right-4 md:w-96 bg-gray-800 p-4 rounded-lg shadow-lg z-50 border border-gray-700">
+      <div className="flex flex-col space-y-3">
+        <div>
+          <h3 className="text-gray-100 font-medium">Install Performance Tracker</h3>
+          <p className="text-gray-400 text-sm mt-1">
+            Install our app for the best experience and offline access
+          </p>
+        </div>
+
+        <div className="flex justify-end space-x-3">
+          <button
+            onClick={handleDismiss}
+            className="px-4 py-2 text-sm text-gray-300 hover:text-white transition-colors"
+          >
+            Not now
+          </button>
+          <button
+            onClick={handleInstall}
+            className="px-4 py-2 text-sm bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg transition-colors"
+          >
+            Install
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -2306,6 +2459,421 @@ function ThrowingSection({ throwingData, player }) {
 export default ThrowingSection;
 
 
+File: src\config\firebase.js
+================================================================================
+
+// src/config/firebase.js
+import { initializeApp } from "firebase/app";
+import { getAnalytics } from "firebase/analytics";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyC7rcVKPWvdvKVOUKPiX4j9av0rTByBVoE",
+  authDomain: "ultify-dash.firebaseapp.com",
+  projectId: "ultify-dash",
+  storageBucket: "ultify-dash.firebasestorage.app",
+  messagingSenderId: "408112418111",
+  appId: "1:408112418111:web:f766cebe2e2115125a978a",
+  measurementId: "G-NK04C3E3Q0"
+};
+
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+const analytics = getAnalytics(app);
+
+export { app };
+
+File: src\contexts\AuthContext.js
+================================================================================
+
+// src/contexts/AuthContext.js
+import React, { createContext, useContext, useState, useEffect } from 'react';
+import { 
+  getAuth,
+  signInWithEmailAndPassword, 
+  createUserWithEmailAndPassword,
+  signInWithPopup,
+  GoogleAuthProvider,
+  signOut,
+  onAuthStateChanged
+} from 'firebase/auth';
+import { initializeApp } from 'firebase/app';
+import { sendPasswordResetEmail } from 'firebase/auth';
+
+
+const firebaseConfig = {
+  apiKey: "AIzaSyC7rcVKPWvdvKVOUKPiX4j9av0rTByBVoE",
+  authDomain: "ultify-dash.firebaseapp.com",
+  projectId: "ultify-dash",
+  storageBucket: "ultify-dash.firebasestorage.app",
+  messagingSenderId: "408112418111",
+  appId: "1:408112418111:web:f766cebe2e2115125a978a",
+  measurementId: "G-NK04C3E3Q0"
+};
+
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+
+const AuthContext = createContext({});
+
+export function useAuth() {
+  return useContext(AuthContext);
+}
+
+export function AuthProvider({ children }) {
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  async function login(email, password) {
+    return signInWithEmailAndPassword(auth, email, password);
+  }
+
+  async function signup(email, password) {
+    return createUserWithEmailAndPassword(auth, email, password);
+  }
+
+  async function loginWithGoogle() {
+    const provider = new GoogleAuthProvider();
+    return signInWithPopup(auth, provider);
+  }
+
+  async function logout() {
+    return signOut(auth);
+  }
+
+  async function resetPassword(email) {
+    return sendPasswordResetEmail(auth, email);
+  }
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setUser(user);
+      setLoading(false);
+    });
+
+    return unsubscribe;
+  }, []);
+
+  const value = {
+    user,
+    login,
+    signup,
+    loginWithGoogle,
+    logout,
+    resetPassword, // Add this
+  };
+
+  return (
+    <AuthContext.Provider value={value}>
+      {!loading && children}
+    </AuthContext.Provider>
+  );
+}
+
+File: src\Dashboard.jsx
+================================================================================
+
+// src/Dashboard.jsx
+
+import React, { useState, useEffect } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import mockData from './data/mockData';
+import ProfileHeader from './components/ProfileHeader';
+import CategorySection from './components/CategorySection';
+import RadarChart from './components/RadarChart';
+import OffensiveSection from './components/OffensiveSection';
+import RadialTabs from './components/RadialTabs';
+import { computeCategoryAverages, computeOverallScore } from './utils/helpers';
+import HomeSection from './components/HomeSection';  // Add this import if not already there
+import { SyncManager } from './utils/sync';
+import { InstallPrompt } from './components/InstallPrompt';
+import RoadmapModal from './components/RoadmapModal';
+import FloatingActionButton from './components/FloatingActionButton';
+
+
+import './index.css';
+
+/* -------------------------------------
+   3) MAIN APP
+-------------------------------------- */
+
+function Dashboard() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [syncPending, setSyncPending] = useState(false);
+  const [isRoadmapOpen, setRoadmapOpen] = useState(false);
+
+  // 3.1) Manage Selected Athlete
+  const [selectedAthleteId, setSelectedAthleteId] = useState(mockData[0].id);
+
+  // 3.2) Automatically select athlete based on URL parameters
+  useEffect(() => {
+    const searchParams = new URLSearchParams(location.search);
+    const athleteIdFromUrl = searchParams.get('id');
+
+    if (athleteIdFromUrl) {
+        const athleteId = parseInt(athleteIdFromUrl, 10);
+        const athleteExists = mockData.some(a => a.id === athleteId);
+        if (athleteExists) {
+            setSelectedAthleteId(athleteId);
+        } else {
+            navigate('/', { replace: true });
+        }
+    } else if (mockData.length > 0) {
+        // Default to athlete with id 7 if available
+        const defaultAthlete = mockData.find(a => a.id === 7);
+        if (defaultAthlete) {
+            setSelectedAthleteId(7);
+        } else {
+            // Fallback to the first athlete if id 7 is not found
+            setSelectedAthleteId(mockData[0].id);
+        }
+    }
+}, [location.search, navigate]);
+
+
+  // Find the selected athlete from mockData
+  const selectedAthlete = mockData.find(athlete => athlete.id === selectedAthleteId);
+  // 3.4) Group data into categories
+  const getCategoryData = (p) => ({
+    physical: [
+      { key: 'speed_explosiveness', label: 'Speed & Explosiveness' },
+      { key: 'endurance', label: 'Endurance' },
+      { key: 'vertical_leap', label: 'Vertical Leap' },
+      { key: 'change_of_direction', label: 'Change of Direction' },
+      { key: 'boxing_out', label: 'Boxing Out' },
+      { key: 'laying_out', label: 'Laying Out' },
+      { key: 'recovery', label: 'Recovery' },
+      { key: 'flexibility_mobility', label: 'Flexibility & Mobility' },
+      { key: 'injury_prevention', label: 'Injury Prevention' },
+    ],
+    offensive: {
+      cutting: [
+        { key: 'angles', label: 'Angles' },
+        { key: 'fakes_footwork', label: 'Fakes & Footwork' },
+        { key: 'timing_field_vision', label: 'Timing & Field Vision' },
+        { key: 'decisiveness', label: 'Decisiveness' },
+        { key: 'catching', label: 'Catching' },
+        { key: 'flow_awareness', label: 'Flow Awareness' },
+        { key: 'isolation_cutting', label: 'Isolation Cutting' },
+        { key: 'continuation_cutting', label: 'Continuation Cutting' },
+      ],
+      handling: [
+        { key: 'handler_movement', label: 'Handler Movement' },
+        { key: 'poise_with_disc', label: 'Poise w/ Disc' },
+        { key: 'breaking_the_mark', label: 'Breaking the Mark' },
+        { key: 'resetting_from_trap_sideline', label: 'Reset from Trap' },
+        { key: 'decision_making_vision', label: 'Decision Making & Vision' },
+        { key: 'offensive_pattern_recognition', label: 'Pattern Recognition' },
+        { key: 'throw_and_go', label: 'Throw & Go' },
+      ],
+      throwing: {
+        backhand: [
+          { key: 'backhand_power', label: 'Backhand Power' },
+          { key: 'backhand_accuracy', label: 'Backhand Accuracy' },
+          { key: 'backhand_quick_release', label: 'Backhand Quick Release' },
+          { key: 'backhand_release_variations', label: 'Backhand Variations' },
+          { key: 'backhand_against_wind', label: 'Backhand vs Wind' },
+          { key: 'backhand_against_difficult_marks', label: 'Backhand vs Difficult Marks' },
+          { key: 'backhand_tempo_control', label: 'Backhand Tempo Control' },
+        ],
+        forehand: [
+          { key: 'forehand_power', label: 'Forehand Power' },
+          { key: 'forehand_accuracy', label: 'Forehand Accuracy' },
+          { key: 'forehand_quick_release', label: 'Forehand Quick Release' },
+          { key: 'forehand_release_variations', label: 'Forehand Variations' },
+          { key: 'forehand_against_wind', label: 'Forehand vs Wind' },
+          { key: 'forehand_against_difficult_marks', label: 'Forehand vs Difficult Marks' },
+          { key: 'forehand_tempo_control', label: 'Forehand Tempo Control' },
+        ],
+        specialty: [
+          { key: 'specialty_power', label: 'Specialty Power' },
+          { key: 'specialty_accuracy', label: 'Specialty Accuracy' },
+          { key: 'specialty_quick_release', label: 'Specialty Quick Release' },
+          { key: 'specialty_release_variations', label: 'Specialty Variations' },
+          { key: 'specialty_against_wind', label: 'Specialty vs Wind' },
+          { key: 'specialty_against_difficult_marks', label: 'Specialty vs Difficult Marks' },
+          { key: 'specialty_tempo_control', label: 'Specialty Tempo Control' },
+        ],
+        hucking: [
+          { key: 'hucking_confidence', label: 'Hucking Confidence' },
+          { key: 'hucking_shape_control', label: 'Hucking Shape Control' },
+          { key: 'hucking_tempo_control', label: 'Hucking Tempo Control' },
+          { key: 'hucking_placement', label: 'Hucking Placement' },
+        ],
+      },
+    },
+    defensive: [
+      { key: 'normal_marking', label: 'Normal Marking' },
+      { key: 'sideline_trap_marking', label: 'Sideline Trap Marking' },
+      { key: 'downfield_defending', label: 'Downfield Defending' },
+      { key: 'handler_defending', label: 'Handler Defending' },
+      { key: 'defensive_pattern_recognition', label: 'Pattern Recognition' },
+      { key: 'help_defense', label: 'Help Defense' },
+      { key: 'switching_on_defense', label: 'Switching on Defense' },
+      { key: 'zone_defense', label: 'Zone Defense' },
+      { key: 'defensive_mental_fortitude', label: 'Defensive Mental Fortitude' },
+    ],
+    mental: [
+      { key: 'mental_game', label: 'Mental Game' },
+      { key: 'feedback_implementation', label: 'Feedback Implementation' },
+      { key: 'defensive_strategy', label: 'Defensive Team Strategy' },
+      { key: 'offensive_strategy', label: 'Offensive Team Strategy' },
+    ],
+  });
+
+  // 3.4) We'll keep track of the active tab, default to "home"
+  const [activeTab, setActiveTab] = useState('home');
+
+  // 3.5) Precompute the main category averages for radial tab display
+  const [averages, setAverages] = useState({});
+  useEffect(() => {
+    if (selectedAthlete) {
+      const newAvg = computeCategoryAverages(selectedAthlete);
+      setAverages(newAvg);
+    }
+  }, [selectedAthlete]);
+
+  // 3.6) Radar example for “Throw Comparison” inside Offensive
+  const radarLabels = [
+    'Backhand Power',
+    'Forehand Power',
+    'Specialty Power',
+    'Backhand Accuracy',
+    'Forehand Accuracy',
+    'Specialty Accuracy',
+  ];
+  const radarDataValues = [
+    selectedAthlete.skills.backhand_power,
+    selectedAthlete.skills.forehand_power,
+    selectedAthlete.skills.specialty_power,
+    selectedAthlete.skills.backhand_accuracy,
+    selectedAthlete.skills.forehand_accuracy,
+    selectedAthlete.skills.specialty_accuracy,
+  ];
+
+  useEffect(() => {
+    const handleOnline = () => {
+      setIsOnline(true);
+      SyncManager.processSyncQueue();
+    };
+    const handleOffline = () => setIsOnline(false);
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
+  /* -------------------------------------
+     RENDER
+  -------------------------------------- */
+  return (
+    
+    <div className="min-h-screen bg-gray-900 text-gray-100 flex flex-col">
+            {!isOnline && (
+        <div className="bg-yellow-600 text-white px-4 py-2 text-center">
+          You're offline. Some features may be limited.
+        </div>
+      )}
+      <InstallPrompt />
+      {/** 1) Profile Header at the top */}
+      <ProfileHeader
+        name={selectedAthlete.metadata.name}
+        email={selectedAthlete.metadata.email}
+        overallScore={
+          activeTab === 'home'
+            ? computeOverallScore(selectedAthlete)
+            : averages[activeTab] || 0
+        }
+        athletes={mockData}
+        selectedAthleteId={selectedAthleteId}
+        onSelectAthlete={(id) => setSelectedAthleteId(id)} // Pass a handler
+      />
+
+      {/** 3) The radial nav row (icons + radial) for Home, Physical, Offensive, Defensive, Mental */}
+      <RadialTabs
+        activeTab={activeTab}
+        onChangeTab={setActiveTab}
+        averages={averages}
+      />
+
+      {/** 4) Scrollable content below the radial nav */}
+      <div className="flex-1 overflow-auto px-4 pb-8 mt-4">
+        {/** HOME (Dashboard) */}
+        {activeTab === 'home' && (
+          <HomeSection player={selectedAthlete} />
+        )}
+
+        {/** PHYSICAL */}
+        {activeTab === 'physical' && (
+          <CategorySection
+            title="Physical Attributes"
+            skills={getCategoryData(selectedAthlete).physical}
+            player={selectedAthlete.skills}
+          />
+        )}
+
+        {/** OFFENSIVE */}
+        {activeTab === 'offensive' && (
+          <>
+            <OffensiveSection
+              offensiveData={getCategoryData(selectedAthlete).offensive}
+              player={selectedAthlete.skills}
+            />
+            {/* Example: A Throw Comparison Radar Chart */}
+            <div className="mt-6">
+              <h2 className="text-xl font-semibold mb-2 text-gray-100">
+                Throw Comparison
+              </h2>
+              <RadarChart labels={radarLabels} dataValues={radarDataValues} />
+            </div>
+          </>
+        )}
+
+        {/** DEFENSIVE */}
+        {activeTab === 'defensive' && (
+          <CategorySection
+            title="Defensive Skills"
+            skills={getCategoryData(selectedAthlete).defensive}
+            player={selectedAthlete.skills}
+          />
+        )}
+
+        {/** MENTAL */}
+        {activeTab === 'mental' && (
+          <CategorySection
+            title="Mental & Recovery"
+            skills={getCategoryData(selectedAthlete).mental}
+            player={selectedAthlete.skills}
+          />
+        )}
+
+        {/* Roadmap Modal */}
+        <RoadmapModal 
+        isOpen={isRoadmapOpen}
+        onClose={() => setRoadmapOpen(false)}
+        player={selectedAthlete}
+      />
+          <FloatingActionButton onClick={() => setRoadmapOpen(true)} />
+    
+    <RoadmapModal 
+      isOpen={isRoadmapOpen}
+      onClose={() => setRoadmapOpen(false)}
+      player={selectedAthlete}
+    />
+      </div>
+    </div>
+  );
+}
+
+export default Dashboard;
+
+
 File: src\data\mockData.js
 ================================================================================
 
@@ -2951,20 +3519,99 @@ File: src\serviceWorkerRegistration.js
 ================================================================================
 
 // src/serviceWorkerRegistration.js
-export function registerServiceWorker() {
-    if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker
-          .register('/service-worker.js')
-          .then((registration) => {
-            console.log('SW registered:', registration);
-          })
-          .catch((error) => {
-            console.log('SW registration failed:', error);
-          });
-      });
-    }
+
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding)
+    .replace(/-/g, '+')
+    .replace(/_/g, '/');
+
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+
+  for (let i = 0; i < rawData.length; ++i) {
+    outputArray[i] = rawData.charCodeAt(i);
   }
+  return outputArray;
+}
+
+export function registerServiceWorker() {
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', async () => {
+      try {
+        // First check if there's an existing registration
+        const existingRegistration = await navigator.serviceWorker.getRegistration();
+        
+        if (existingRegistration) {
+          console.log('[SW] Found existing registration:', existingRegistration);
+          return;
+        }
+
+        const registration = await navigator.serviceWorker.register('/service-worker.js');
+        console.log('[SW] Registration successful:', registration);
+
+        // Listen for updates
+        registration.addEventListener('updatefound', () => {
+          const newWorker = registration.installing;
+          console.log('[SW] New worker being installed:', newWorker?.state);
+
+          newWorker?.addEventListener('statechange', () => {
+            console.log('[SW] New worker state:', newWorker.state);
+          });
+        });
+
+        // Optional: Set up periodic updates
+        setInterval(async () => {
+          try {
+            await registration.update();
+            console.log('[SW] Checked for updates');
+          } catch (error) {
+            console.error('[SW] Update check failed:', error);
+          }
+        }, 1000 * 60 * 60); // Check every hour
+
+        // Optional: Subscribe to push notifications
+        if ('PushManager' in window) {
+          try {
+            const subscription = await registration.pushManager.getSubscription();
+            if (!subscription) {
+              // You would need to replace this with your VAPID public key
+              const vapidPublicKey = 'YOUR_VAPID_PUBLIC_KEY';
+              const convertedVapidKey = urlBase64ToUint8Array(vapidPublicKey);
+              
+              await registration.pushManager.subscribe({
+                userVisibleOnly: true,
+                applicationServerKey: convertedVapidKey
+              });
+              console.log('[SW] Push notification subscription successful');
+            }
+          } catch (error) {
+            console.error('[SW] Push subscription failed:', error);
+          }
+        }
+
+      } catch (error) {
+        console.error('[SW] Service worker registration failed:', error);
+      }
+    });
+
+    // Handle service worker updates
+    let refreshing = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (!refreshing) {
+        refreshing = true;
+        window.location.reload();
+      }
+    });
+
+    // Handle messages from service worker
+    navigator.serviceWorker.addEventListener('message', (event) => {
+      console.log('[SW] Received message:', event.data);
+    });
+  } else {
+    console.log('[SW] Service workers are not supported');
+  }
+}
 
 File: src\setupTests.js
 ================================================================================
@@ -3298,296 +3945,31 @@ File: src\App.jsx
 ================================================================================
 
 // src/App.jsx
-
-import React, { useState, useEffect } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
-import mockData from './data/mockData';
-import ProfileHeader from './components/ProfileHeader';
-import CategorySection from './components/CategorySection';
-import RadarChart from './components/RadarChart';
-import OffensiveSection from './components/OffensiveSection';
-import RadialTabs from './components/RadialTabs';
-import { computeCategoryAverages, computeOverallScore } from './utils/helpers';
-import HomeSection from './components/HomeSection';  // Add this import if not already there
-import { SyncManager } from './utils/sync';
-import { InstallPrompt } from './components/InstallPrompt';
-import RoadmapModal from './components/RoadmapModal';
-import FloatingActionButton from './components/FloatingActionButton';
-
-import './index.css';
-
-/* -------------------------------------
-   3) MAIN APP
--------------------------------------- */
+import { Routes, Route } from 'react-router-dom';
+import { AuthProvider } from './contexts/AuthContext';
+import ProtectedRoute from './components/auth/ProtectedRoute';
+import LoginPage from './components/auth/LoginPage';
+import Dashboard from './Dashboard'; // Rename your current App content to Dashboard
 
 function App() {
-  const location = useLocation();
-  const navigate = useNavigate();
-  const [isOnline, setIsOnline] = useState(navigator.onLine);
-  const [syncPending, setSyncPending] = useState(false);
-  const [isRoadmapOpen, setRoadmapOpen] = useState(false);
-
-  // 3.1) Manage Selected Athlete
-  const [selectedAthleteId, setSelectedAthleteId] = useState(mockData[0].id);
-
-  // 3.2) Automatically select athlete based on URL parameters
-  useEffect(() => {
-    const searchParams = new URLSearchParams(location.search);
-    const athleteIdFromUrl = searchParams.get('id');      // ?id=3
-    const athleteNameFromUrl = searchParams.get('name');  // ?name=Jonathan
-
-    if (athleteIdFromUrl) {
-      const athleteId = parseInt(athleteIdFromUrl, 10);
-      const athleteExists = mockData.some(a => a.id === athleteId);
-      if (athleteExists) {
-        setSelectedAthleteId(athleteId);
-      } else {
-        // If athlete ID doesn't exist, navigate to default or show an error
-        navigate('/', { replace: true });
-      }
-    }
-  }, [location.search, navigate]);
-
-  // Find the selected athlete from mockData
-  const selectedAthlete = mockData.find(athlete => athlete.id === selectedAthleteId);
-  // 3.4) Group data into categories
-  const getCategoryData = (p) => ({
-    physical: [
-      { key: 'speed_explosiveness', label: 'Speed & Explosiveness' },
-      { key: 'endurance', label: 'Endurance' },
-      { key: 'vertical_leap', label: 'Vertical Leap' },
-      { key: 'change_of_direction', label: 'Change of Direction' },
-      { key: 'boxing_out', label: 'Boxing Out' },
-      { key: 'laying_out', label: 'Laying Out' },
-      { key: 'recovery', label: 'Recovery' },
-      { key: 'flexibility_mobility', label: 'Flexibility & Mobility' },
-      { key: 'injury_prevention', label: 'Injury Prevention' },
-    ],
-    offensive: {
-      cutting: [
-        { key: 'angles', label: 'Angles' },
-        { key: 'fakes_footwork', label: 'Fakes & Footwork' },
-        { key: 'timing_field_vision', label: 'Timing & Field Vision' },
-        { key: 'decisiveness', label: 'Decisiveness' },
-        { key: 'catching', label: 'Catching' },
-        { key: 'flow_awareness', label: 'Flow Awareness' },
-        { key: 'isolation_cutting', label: 'Isolation Cutting' },
-        { key: 'continuation_cutting', label: 'Continuation Cutting' },
-      ],
-      handling: [
-        { key: 'handler_movement', label: 'Handler Movement' },
-        { key: 'poise_with_disc', label: 'Poise w/ Disc' },
-        { key: 'breaking_the_mark', label: 'Breaking the Mark' },
-        { key: 'resetting_from_trap_sideline', label: 'Reset from Trap' },
-        { key: 'decision_making_vision', label: 'Decision Making & Vision' },
-        { key: 'offensive_pattern_recognition', label: 'Pattern Recognition' },
-        { key: 'throw_and_go', label: 'Throw & Go' },
-      ],
-      throwing: {
-        backhand: [
-          { key: 'backhand_power', label: 'Backhand Power' },
-          { key: 'backhand_accuracy', label: 'Backhand Accuracy' },
-          { key: 'backhand_quick_release', label: 'Backhand Quick Release' },
-          { key: 'backhand_release_variations', label: 'Backhand Variations' },
-          { key: 'backhand_against_wind', label: 'Backhand vs Wind' },
-          { key: 'backhand_against_difficult_marks', label: 'Backhand vs Difficult Marks' },
-          { key: 'backhand_tempo_control', label: 'Backhand Tempo Control' },
-        ],
-        forehand: [
-          { key: 'forehand_power', label: 'Forehand Power' },
-          { key: 'forehand_accuracy', label: 'Forehand Accuracy' },
-          { key: 'forehand_quick_release', label: 'Forehand Quick Release' },
-          { key: 'forehand_release_variations', label: 'Forehand Variations' },
-          { key: 'forehand_against_wind', label: 'Forehand vs Wind' },
-          { key: 'forehand_against_difficult_marks', label: 'Forehand vs Difficult Marks' },
-          { key: 'forehand_tempo_control', label: 'Forehand Tempo Control' },
-        ],
-        specialty: [
-          { key: 'specialty_power', label: 'Specialty Power' },
-          { key: 'specialty_accuracy', label: 'Specialty Accuracy' },
-          { key: 'specialty_quick_release', label: 'Specialty Quick Release' },
-          { key: 'specialty_release_variations', label: 'Specialty Variations' },
-          { key: 'specialty_against_wind', label: 'Specialty vs Wind' },
-          { key: 'specialty_against_difficult_marks', label: 'Specialty vs Difficult Marks' },
-          { key: 'specialty_tempo_control', label: 'Specialty Tempo Control' },
-        ],
-        hucking: [
-          { key: 'hucking_confidence', label: 'Hucking Confidence' },
-          { key: 'hucking_shape_control', label: 'Hucking Shape Control' },
-          { key: 'hucking_tempo_control', label: 'Hucking Tempo Control' },
-          { key: 'hucking_placement', label: 'Hucking Placement' },
-        ],
-      },
-    },
-    defensive: [
-      { key: 'normal_marking', label: 'Normal Marking' },
-      { key: 'sideline_trap_marking', label: 'Sideline Trap Marking' },
-      { key: 'downfield_defending', label: 'Downfield Defending' },
-      { key: 'handler_defending', label: 'Handler Defending' },
-      { key: 'defensive_pattern_recognition', label: 'Pattern Recognition' },
-      { key: 'help_defense', label: 'Help Defense' },
-      { key: 'switching_on_defense', label: 'Switching on Defense' },
-      { key: 'zone_defense', label: 'Zone Defense' },
-      { key: 'defensive_mental_fortitude', label: 'Defensive Mental Fortitude' },
-    ],
-    mental: [
-      { key: 'mental_game', label: 'Mental Game' },
-      { key: 'feedback_implementation', label: 'Feedback Implementation' },
-      { key: 'defensive_strategy', label: 'Defensive Team Strategy' },
-      { key: 'offensive_strategy', label: 'Offensive Team Strategy' },
-    ],
-  });
-
-  // 3.4) We'll keep track of the active tab, default to "home"
-  const [activeTab, setActiveTab] = useState('home');
-
-  // 3.5) Precompute the main category averages for radial tab display
-  const [averages, setAverages] = useState({});
-  useEffect(() => {
-    if (selectedAthlete) {
-      const newAvg = computeCategoryAverages(selectedAthlete);
-      setAverages(newAvg);
-    }
-  }, [selectedAthlete]);
-
-  // 3.6) Radar example for “Throw Comparison” inside Offensive
-  const radarLabels = [
-    'Backhand Power',
-    'Forehand Power',
-    'Specialty Power',
-    'Backhand Accuracy',
-    'Forehand Accuracy',
-    'Specialty Accuracy',
-  ];
-  const radarDataValues = [
-    selectedAthlete.skills.backhand_power,
-    selectedAthlete.skills.forehand_power,
-    selectedAthlete.skills.specialty_power,
-    selectedAthlete.skills.backhand_accuracy,
-    selectedAthlete.skills.forehand_accuracy,
-    selectedAthlete.skills.specialty_accuracy,
-  ];
-
-  useEffect(() => {
-    const handleOnline = () => {
-      setIsOnline(true);
-      SyncManager.processSyncQueue();
-    };
-    const handleOffline = () => setIsOnline(false);
-
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
-
-    return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
-    };
-  }, []);
-
-  /* -------------------------------------
-     RENDER
-  -------------------------------------- */
   return (
-    
-    <div className="min-h-screen bg-gray-900 text-gray-100 flex flex-col">
-            {!isOnline && (
-        <div className="bg-yellow-600 text-white px-4 py-2 text-center">
-          You're offline. Some features may be limited.
-        </div>
-      )}
-      <InstallPrompt />
-      {/** 1) Profile Header at the top */}
-      <ProfileHeader
-        name={selectedAthlete.metadata.name}
-        email={selectedAthlete.metadata.email}
-        overallScore={
-          activeTab === 'home'
-            ? computeOverallScore(selectedAthlete)
-            : averages[activeTab] || 0
-        }
-        athletes={mockData}
-        selectedAthleteId={selectedAthleteId}
-        onSelectAthlete={(id) => setSelectedAthleteId(id)} // Pass a handler
-      />
-
-      {/** 3) The radial nav row (icons + radial) for Home, Physical, Offensive, Defensive, Mental */}
-      <RadialTabs
-        activeTab={activeTab}
-        onChangeTab={setActiveTab}
-        averages={averages}
-      />
-
-      {/** 4) Scrollable content below the radial nav */}
-      <div className="flex-1 overflow-auto px-4 pb-8 mt-4">
-        {/** HOME (Dashboard) */}
-        {activeTab === 'home' && (
-          <HomeSection player={selectedAthlete} />
-        )}
-
-        {/** PHYSICAL */}
-        {activeTab === 'physical' && (
-          <CategorySection
-            title="Physical Attributes"
-            skills={getCategoryData(selectedAthlete).physical}
-            player={selectedAthlete.skills}
-          />
-        )}
-
-        {/** OFFENSIVE */}
-        {activeTab === 'offensive' && (
-          <>
-            <OffensiveSection
-              offensiveData={getCategoryData(selectedAthlete).offensive}
-              player={selectedAthlete.skills}
-            />
-            {/* Example: A Throw Comparison Radar Chart */}
-            <div className="mt-6">
-              <h2 className="text-xl font-semibold mb-2 text-gray-100">
-                Throw Comparison
-              </h2>
-              <RadarChart labels={radarLabels} dataValues={radarDataValues} />
-            </div>
-          </>
-        )}
-
-        {/** DEFENSIVE */}
-        {activeTab === 'defensive' && (
-          <CategorySection
-            title="Defensive Skills"
-            skills={getCategoryData(selectedAthlete).defensive}
-            player={selectedAthlete.skills}
-          />
-        )}
-
-        {/** MENTAL */}
-        {activeTab === 'mental' && (
-          <CategorySection
-            title="Mental & Recovery"
-            skills={getCategoryData(selectedAthlete).mental}
-            player={selectedAthlete.skills}
-          />
-        )}
-
-        {/* Roadmap Modal */}
-        <RoadmapModal 
-        isOpen={isRoadmapOpen}
-        onClose={() => setRoadmapOpen(false)}
-        player={selectedAthlete}
-      />
-          <FloatingActionButton onClick={() => setRoadmapOpen(true)} />
-    
-    <RoadmapModal 
-      isOpen={isRoadmapOpen}
-      onClose={() => setRoadmapOpen(false)}
-      player={selectedAthlete}
-    />
-      </div>
-    </div>
+    <AuthProvider>
+      <Routes>
+        <Route path="/login" element={<LoginPage />} />
+        <Route
+          path="/*"
+          element={
+            <ProtectedRoute>
+              <Dashboard />
+            </ProtectedRoute>
+          }
+        />
+      </Routes>
+    </AuthProvider>
   );
 }
 
 export default App;
-
 
 File: src\App.test.js
 ================================================================================
@@ -3687,6 +4069,332 @@ const AthleteDropdown = ({ athletes, selectedAthleteId, onSelectAthlete }) => {
 
 export default AthleteDropdown;
 
+
+File: src\components\auth\LoginPage.jsx
+================================================================================
+
+import React, { useState, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../../contexts/AuthContext';
+import { motion, AnimatePresence } from 'framer-motion';
+import { 
+  Mail, 
+  Lock, 
+  AlertCircle, 
+  Loader2, 
+  ArrowRight,
+  CheckCircle 
+} from 'lucide-react';
+
+export default function LoginPage() {
+  const [isLogin, setIsLogin] = useState(true);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [isResetPassword, setIsResetPassword] = useState(false);
+  const navigate = useNavigate();
+  const { login, signup, loginWithGoogle, resetPassword } = useAuth();
+
+  // Function to handle user-friendly error messages
+  const getErrorMessage = useCallback((error) => {
+    switch (error.code) {
+      case 'auth/invalid-credential':
+        return 'Invalid email or password. Please check your credentials and try again.';
+      case 'auth/wrong-password':
+        return 'Incorrect password. Please try again.';
+      case 'auth/user-not-found':
+        return 'No account found with this email.';
+      case 'auth/email-already-in-use':
+        return 'An account already exists with this email.';
+      case 'auth/weak-password':
+        return 'Password should be at least 6 characters.';
+      case 'auth/invalid-email':
+        return 'Please enter a valid email address.';
+      case 'auth/too-many-requests':
+        return 'Too many attempts. Please try again later.';
+      case 'auth/network-request-failed':
+        return 'Network error. Please check your internet connection and try again.';
+      case 'auth/popup-closed-by-user':
+        return 'Sign in was cancelled. Please try again.';
+      case 'auth/cancelled-popup-request':
+        return 'Sign in process was interrupted. Please try again.';
+      case 'auth/operation-not-allowed':
+        return 'This sign in method is not enabled. Please try another method.';
+      case 'auth/user-disabled':
+        return 'This account has been disabled. Please contact support for assistance.';
+      default:
+        return error.message || 'An error occurred. Please try again.';
+    }
+}, []);
+
+  const clearMessages = useCallback(() => {
+    setError('');
+    setSuccessMessage('');
+  }, []);
+
+  const resetForm = useCallback(() => {
+    setEmail('');
+    setPassword('');
+    clearMessages();
+  }, [clearMessages]);
+
+  const handleAuthModeChange = useCallback((mode) => {
+    if (mode === 'reset') {
+      setIsResetPassword(true);
+      setIsLogin(true);
+    } else {
+      setIsResetPassword(false);
+      setIsLogin(mode === 'login');
+    }
+    clearMessages();
+  }, [clearMessages]);
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    clearMessages();
+    setLoading(true);
+
+    try {
+      if (isResetPassword) {
+        await resetPassword(email);
+        setSuccessMessage('Password reset email sent! Please check your inbox.');
+        setIsResetPassword(false);
+      } else if (isLogin) {
+        await login(email, password);
+        resetForm();
+        navigate('/');
+      } else {
+        await signup(email, password);
+        resetForm();
+        navigate('/');
+      }
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleGoogleLogin() {
+    clearMessages();
+    setLoading(true);
+
+    try {
+      await loginWithGoogle();
+      resetForm();
+      navigate('/');
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="min-h-screen bg-gradient-to-b from-gray-900 to-gray-800 flex flex-col items-center justify-center p-4">
+      <div className="w-full max-w-md">
+        {/* Logo/Brand Section */}
+        <div className="text-center mb-8">
+          <motion.div
+            initial={{ scale: 0.8, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ duration: 0.3 }}
+          >
+            <div className="w-16 h-16 mx-auto mb-4 flex items-center justify-center">
+              <img src="/favicon.svg" alt="Logo" className="w-full h-full" />
+            </div>
+          </motion.div>
+          <h2 className="text-2xl md:text-3xl font-bold text-white">
+            {isResetPassword 
+              ? 'Reset Password'
+              : isLogin 
+                ? 'Welcome back' 
+                : 'Create your account'}
+          </h2>
+          <p className="mt-2 text-gray-400 text-sm">
+            {isResetPassword
+              ? 'Enter your email and we will send you reset instructions.'
+              : isLogin 
+                ? 'Great to see you again! Please enter your details.'
+                : 'Start your performance tracking journey today.'}
+          </p>
+        </div>
+
+        {/* Main Form */}
+        <motion.div
+          initial={{ y: 20, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ duration: 0.4, delay: 0.1 }}
+          className="bg-gray-800/50 backdrop-blur-xl rounded-2xl p-6 md:p-8 shadow-xl border border-gray-700/50"
+        >
+          <AnimatePresence mode="wait">
+            {error && (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/50 flex items-center gap-2"
+              >
+                <AlertCircle className="h-4 w-4 text-red-500 flex-shrink-0" />
+                <p className="text-sm text-red-500">{error}</p>
+              </motion.div>
+            )}
+            {successMessage && (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="mb-4 p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/50 flex items-center gap-2"
+              >
+                <CheckCircle className="h-4 w-4 text-emerald-500 flex-shrink-0" />
+                <p className="text-sm text-emerald-500">{successMessage}</p>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-1">
+              <label htmlFor="email" className="text-sm font-medium text-gray-300">
+                Email
+              </label>
+              <div className="relative">
+                <input
+                  id="email"
+                  type="email"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="w-full px-4 py-2.5 rounded-lg bg-gray-900/50 border border-gray-700 text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 transition-colors"
+                  placeholder="you@example.com"
+                />
+                <Mail className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-500" />
+              </div>
+            </div>
+
+            {!isResetPassword && (
+              <div className="space-y-1">
+                <div className="flex items-center justify-between">
+                  <label htmlFor="password" className="text-sm font-medium text-gray-300">
+                    Password
+                  </label>
+                  {isLogin && (
+                    <button
+                      type="button"
+                      onClick={() => handleAuthModeChange('reset')}
+                      className="text-sm text-emerald-400 hover:text-emerald-300 transition-colors"
+                    >
+                      Forgot password?
+                    </button>
+                  )}
+                </div>
+                <div className="relative">
+                  <input
+                    id="password"
+                    type="password"
+                    required={!isResetPassword}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="w-full px-4 py-2.5 rounded-lg bg-gray-900/50 border border-gray-700 text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 transition-colors"
+                    placeholder="••••••••"
+                  />
+                  <Lock className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-500" />
+                </div>
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-emerald-500 hover:bg-emerald-600 text-white py-2.5 rounded-lg font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            >
+              {loading ? (
+                <Loader2 className="w-5 h-5 animate-spin" />
+              ) : (
+                <>
+                  {isResetPassword 
+                    ? 'Send reset instructions' 
+                    : isLogin 
+                      ? 'Sign in' 
+                      : 'Create account'}
+                  <ArrowRight className="w-5 h-5" />
+                </>
+              )}
+            </button>
+          </form>
+
+          {!isResetPassword && (
+            <>
+              <div className="mt-6">
+                <div className="relative">
+                  <div className="absolute inset-0 flex items-center">
+                    <div className="w-full border-t border-gray-700"></div>
+                  </div>
+                  <div className="relative flex justify-center text-sm">
+                    <span className="px-2 bg-gray-800/50 text-gray-400">
+                      Or continue with
+                    </span>
+                  </div>
+                </div>
+
+                <button
+                  onClick={handleGoogleLogin}
+                  disabled={loading}
+                  className="mt-4 w-full flex items-center justify-center gap-3 px-4 py-2.5 border border-gray-700 rounded-lg text-gray-300 hover:bg-gray-700/50 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500"
+                >
+                  <svg className="h-5 w-5" viewBox="0 0 24 24">
+                    <path
+                      fill="currentColor"
+                      d="M12.545,10.239v3.821h5.445c-0.712,2.315-2.647,3.972-5.445,3.972c-3.332,0-6.033-2.701-6.033-6.032s2.701-6.032,6.033-6.032c1.498,0,2.866,0.549,3.921,1.453l2.814-2.814C17.503,2.988,15.139,2,12.545,2C7.021,2,2.543,6.477,2.543,12s4.478,10,10.002,10c8.396,0,10.249-7.85,9.426-11.748L12.545,10.239z"
+                    />
+                  </svg>
+                  Google
+                </button>
+              </div>
+            </>
+          )}
+
+          <div className="mt-6 text-center space-y-3">
+            {!isResetPassword && (
+              <button
+                onClick={() => handleAuthModeChange(isLogin ? 'signup' : 'login')}
+                className="text-sm text-emerald-400 hover:text-emerald-300 transition-colors"
+              >
+                {isLogin ? "Don't have an account? Sign up" : 'Already have an account? Sign in'}
+              </button>
+            )}
+            {isResetPassword && (
+              <button
+                onClick={() => handleAuthModeChange('login')}
+                className="block w-full text-sm text-gray-400 hover:text-gray-300 transition-colors"
+              >
+                Return to login
+              </button>
+            )}
+          </div>
+        </motion.div>
+      </div>
+    </div>
+  );
+}
+
+File: src\components\auth\ProtectedRoute.jsx
+================================================================================
+
+// src/components/auth/ProtectedRoute.jsx
+import { Navigate } from 'react-router-dom';
+import { useAuth } from '../../contexts/AuthContext';
+
+export default function ProtectedRoute({ children }) {
+  const { user } = useAuth();
+  
+  if (!user) {
+    return <Navigate to="/login" replace />;
+  }
+
+  return children;
+}
 
 File: src\components\CategorySection.jsx
 ================================================================================
@@ -3906,35 +4614,125 @@ import React, { useState, useEffect } from 'react';
 
 export function InstallPrompt() {
   const [installPrompt, setInstallPrompt] = useState(null);
+  const [debugInfo, setDebugInfo] = useState({ 
+    isStandalone: false, 
+    hasShownPrompt: false,
+    promptEventReceived: false 
+  });
 
   useEffect(() => {
-    const handler = (e) => {
+    console.log('[InstallPrompt] Component mounted');
+
+    // Check if running in standalone mode
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches 
+      || (window.navigator.standalone) 
+      || document.referrer.includes('android-app://');
+      
+    console.log('[InstallPrompt] Is standalone:', isStandalone);
+
+    const hasShownPrompt = localStorage.getItem('installPromptShown');
+    console.log('[InstallPrompt] Previously shown:', hasShownPrompt);
+
+    setDebugInfo(prev => ({
+      ...prev,
+      isStandalone,
+      hasShownPrompt: !!hasShownPrompt
+    }));
+
+    // Handle the beforeinstallprompt event
+    const handleBeforeInstallPrompt = (e) => {
+      console.log('[InstallPrompt] beforeinstallprompt event fired', e);
       e.preventDefault();
       setInstallPrompt(e);
+      setDebugInfo(prev => ({ ...prev, promptEventReceived: true }));
     };
 
-    window.addEventListener('beforeinstallprompt', handler);
-    return () => window.removeEventListener('beforeinstallprompt', handler);
+    // The beforeinstallprompt event may have fired before our listener
+    // was registered. Check if it's stored in window
+    if (window.deferredPrompt) {
+      console.log('[InstallPrompt] Found existing deferredPrompt');
+      handleBeforeInstallPrompt(window.deferredPrompt);
+    }
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+
+    // Check if app was installed
+    window.addEventListener('appinstalled', (e) => {
+      console.log('[InstallPrompt] App was installed', e);
+      localStorage.setItem('appInstalled', 'true');
+      setInstallPrompt(null);
+    });
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    };
   }, []);
 
-  if (!installPrompt) return null;
+  // Log state changes
+  useEffect(() => {
+    console.log('[InstallPrompt] State updated:', {
+      hasPrompt: !!installPrompt,
+      debugInfo
+    });
+  }, [installPrompt, debugInfo]);
+
+  const handleInstall = async () => {
+    if (!installPrompt) {
+      console.log('[InstallPrompt] No install prompt available');
+      return;
+    }
+
+    try {
+      console.log('[InstallPrompt] Triggering install prompt');
+      const result = await installPrompt.prompt();
+      console.log('[InstallPrompt] Install prompt result:', result);
+      setInstallPrompt(null);
+    } catch (error) {
+      console.error('[InstallPrompt] Error installing app:', error);
+    }
+  };
+
+  const handleDismiss = () => {
+    console.log('[InstallPrompt] Prompt dismissed');
+    setInstallPrompt(null);
+    localStorage.setItem('installPromptDismissed', Date.now().toString());
+  };
+
+  // Early return conditions
+  if (debugInfo.isStandalone) {
+    console.log('[InstallPrompt] App is installed, not showing prompt');
+    return null;
+  }
+
+  if (!installPrompt) {
+    console.log('[InstallPrompt] No prompt available, not showing UI');
+    return null;
+  }
 
   return (
-    <div className="fixed bottom-4 left-4 right-4 bg-gray-800 p-4 rounded-lg shadow-lg">
-      <p className="text-gray-100 mb-2">Install Ultify Performance Tracker?</p>
-      <div className="flex space-x-2">
-        <button
-          onClick={() => installPrompt.prompt()}
-          className="bg-emerald-500 text-white px-4 py-2 rounded"
-        >
-          Install
-        </button>
-        <button
-          onClick={() => setInstallPrompt(null)}
-          className="bg-gray-600 text-white px-4 py-2 rounded"
-        >
-          Not now
-        </button>
+    <div className="fixed bottom-4 left-4 right-4 md:left-auto md:right-4 md:w-96 bg-gray-800 p-4 rounded-lg shadow-lg z-50 border border-gray-700">
+      <div className="flex flex-col space-y-3">
+        <div>
+          <h3 className="text-gray-100 font-medium">Install Performance Tracker</h3>
+          <p className="text-gray-400 text-sm mt-1">
+            Install our app for the best experience and offline access
+          </p>
+        </div>
+
+        <div className="flex justify-end space-x-3">
+          <button
+            onClick={handleDismiss}
+            className="px-4 py-2 text-sm text-gray-300 hover:text-white transition-colors"
+          >
+            Not now
+          </button>
+          <button
+            onClick={handleInstall}
+            className="px-4 py-2 text-sm bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg transition-colors"
+          >
+            Install
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -5215,6 +6013,421 @@ function ThrowingSection({ throwingData, player }) {
 export default ThrowingSection;
 
 
+File: src\config\firebase.js
+================================================================================
+
+// src/config/firebase.js
+import { initializeApp } from "firebase/app";
+import { getAnalytics } from "firebase/analytics";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyC7rcVKPWvdvKVOUKPiX4j9av0rTByBVoE",
+  authDomain: "ultify-dash.firebaseapp.com",
+  projectId: "ultify-dash",
+  storageBucket: "ultify-dash.firebasestorage.app",
+  messagingSenderId: "408112418111",
+  appId: "1:408112418111:web:f766cebe2e2115125a978a",
+  measurementId: "G-NK04C3E3Q0"
+};
+
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+const analytics = getAnalytics(app);
+
+export { app };
+
+File: src\contexts\AuthContext.js
+================================================================================
+
+// src/contexts/AuthContext.js
+import React, { createContext, useContext, useState, useEffect } from 'react';
+import { 
+  getAuth,
+  signInWithEmailAndPassword, 
+  createUserWithEmailAndPassword,
+  signInWithPopup,
+  GoogleAuthProvider,
+  signOut,
+  onAuthStateChanged
+} from 'firebase/auth';
+import { initializeApp } from 'firebase/app';
+import { sendPasswordResetEmail } from 'firebase/auth';
+
+
+const firebaseConfig = {
+  apiKey: "AIzaSyC7rcVKPWvdvKVOUKPiX4j9av0rTByBVoE",
+  authDomain: "ultify-dash.firebaseapp.com",
+  projectId: "ultify-dash",
+  storageBucket: "ultify-dash.firebasestorage.app",
+  messagingSenderId: "408112418111",
+  appId: "1:408112418111:web:f766cebe2e2115125a978a",
+  measurementId: "G-NK04C3E3Q0"
+};
+
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+
+const AuthContext = createContext({});
+
+export function useAuth() {
+  return useContext(AuthContext);
+}
+
+export function AuthProvider({ children }) {
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  async function login(email, password) {
+    return signInWithEmailAndPassword(auth, email, password);
+  }
+
+  async function signup(email, password) {
+    return createUserWithEmailAndPassword(auth, email, password);
+  }
+
+  async function loginWithGoogle() {
+    const provider = new GoogleAuthProvider();
+    return signInWithPopup(auth, provider);
+  }
+
+  async function logout() {
+    return signOut(auth);
+  }
+
+  async function resetPassword(email) {
+    return sendPasswordResetEmail(auth, email);
+  }
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setUser(user);
+      setLoading(false);
+    });
+
+    return unsubscribe;
+  }, []);
+
+  const value = {
+    user,
+    login,
+    signup,
+    loginWithGoogle,
+    logout,
+    resetPassword, // Add this
+  };
+
+  return (
+    <AuthContext.Provider value={value}>
+      {!loading && children}
+    </AuthContext.Provider>
+  );
+}
+
+File: src\Dashboard.jsx
+================================================================================
+
+// src/Dashboard.jsx
+
+import React, { useState, useEffect } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import mockData from './data/mockData';
+import ProfileHeader from './components/ProfileHeader';
+import CategorySection from './components/CategorySection';
+import RadarChart from './components/RadarChart';
+import OffensiveSection from './components/OffensiveSection';
+import RadialTabs from './components/RadialTabs';
+import { computeCategoryAverages, computeOverallScore } from './utils/helpers';
+import HomeSection from './components/HomeSection';  // Add this import if not already there
+import { SyncManager } from './utils/sync';
+import { InstallPrompt } from './components/InstallPrompt';
+import RoadmapModal from './components/RoadmapModal';
+import FloatingActionButton from './components/FloatingActionButton';
+
+
+import './index.css';
+
+/* -------------------------------------
+   3) MAIN APP
+-------------------------------------- */
+
+function Dashboard() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [syncPending, setSyncPending] = useState(false);
+  const [isRoadmapOpen, setRoadmapOpen] = useState(false);
+
+  // 3.1) Manage Selected Athlete
+  const [selectedAthleteId, setSelectedAthleteId] = useState(mockData[0].id);
+
+  // 3.2) Automatically select athlete based on URL parameters
+  useEffect(() => {
+    const searchParams = new URLSearchParams(location.search);
+    const athleteIdFromUrl = searchParams.get('id');
+
+    if (athleteIdFromUrl) {
+        const athleteId = parseInt(athleteIdFromUrl, 10);
+        const athleteExists = mockData.some(a => a.id === athleteId);
+        if (athleteExists) {
+            setSelectedAthleteId(athleteId);
+        } else {
+            navigate('/', { replace: true });
+        }
+    } else if (mockData.length > 0) {
+        // Default to athlete with id 7 if available
+        const defaultAthlete = mockData.find(a => a.id === 7);
+        if (defaultAthlete) {
+            setSelectedAthleteId(7);
+        } else {
+            // Fallback to the first athlete if id 7 is not found
+            setSelectedAthleteId(mockData[0].id);
+        }
+    }
+}, [location.search, navigate]);
+
+
+  // Find the selected athlete from mockData
+  const selectedAthlete = mockData.find(athlete => athlete.id === selectedAthleteId);
+  // 3.4) Group data into categories
+  const getCategoryData = (p) => ({
+    physical: [
+      { key: 'speed_explosiveness', label: 'Speed & Explosiveness' },
+      { key: 'endurance', label: 'Endurance' },
+      { key: 'vertical_leap', label: 'Vertical Leap' },
+      { key: 'change_of_direction', label: 'Change of Direction' },
+      { key: 'boxing_out', label: 'Boxing Out' },
+      { key: 'laying_out', label: 'Laying Out' },
+      { key: 'recovery', label: 'Recovery' },
+      { key: 'flexibility_mobility', label: 'Flexibility & Mobility' },
+      { key: 'injury_prevention', label: 'Injury Prevention' },
+    ],
+    offensive: {
+      cutting: [
+        { key: 'angles', label: 'Angles' },
+        { key: 'fakes_footwork', label: 'Fakes & Footwork' },
+        { key: 'timing_field_vision', label: 'Timing & Field Vision' },
+        { key: 'decisiveness', label: 'Decisiveness' },
+        { key: 'catching', label: 'Catching' },
+        { key: 'flow_awareness', label: 'Flow Awareness' },
+        { key: 'isolation_cutting', label: 'Isolation Cutting' },
+        { key: 'continuation_cutting', label: 'Continuation Cutting' },
+      ],
+      handling: [
+        { key: 'handler_movement', label: 'Handler Movement' },
+        { key: 'poise_with_disc', label: 'Poise w/ Disc' },
+        { key: 'breaking_the_mark', label: 'Breaking the Mark' },
+        { key: 'resetting_from_trap_sideline', label: 'Reset from Trap' },
+        { key: 'decision_making_vision', label: 'Decision Making & Vision' },
+        { key: 'offensive_pattern_recognition', label: 'Pattern Recognition' },
+        { key: 'throw_and_go', label: 'Throw & Go' },
+      ],
+      throwing: {
+        backhand: [
+          { key: 'backhand_power', label: 'Backhand Power' },
+          { key: 'backhand_accuracy', label: 'Backhand Accuracy' },
+          { key: 'backhand_quick_release', label: 'Backhand Quick Release' },
+          { key: 'backhand_release_variations', label: 'Backhand Variations' },
+          { key: 'backhand_against_wind', label: 'Backhand vs Wind' },
+          { key: 'backhand_against_difficult_marks', label: 'Backhand vs Difficult Marks' },
+          { key: 'backhand_tempo_control', label: 'Backhand Tempo Control' },
+        ],
+        forehand: [
+          { key: 'forehand_power', label: 'Forehand Power' },
+          { key: 'forehand_accuracy', label: 'Forehand Accuracy' },
+          { key: 'forehand_quick_release', label: 'Forehand Quick Release' },
+          { key: 'forehand_release_variations', label: 'Forehand Variations' },
+          { key: 'forehand_against_wind', label: 'Forehand vs Wind' },
+          { key: 'forehand_against_difficult_marks', label: 'Forehand vs Difficult Marks' },
+          { key: 'forehand_tempo_control', label: 'Forehand Tempo Control' },
+        ],
+        specialty: [
+          { key: 'specialty_power', label: 'Specialty Power' },
+          { key: 'specialty_accuracy', label: 'Specialty Accuracy' },
+          { key: 'specialty_quick_release', label: 'Specialty Quick Release' },
+          { key: 'specialty_release_variations', label: 'Specialty Variations' },
+          { key: 'specialty_against_wind', label: 'Specialty vs Wind' },
+          { key: 'specialty_against_difficult_marks', label: 'Specialty vs Difficult Marks' },
+          { key: 'specialty_tempo_control', label: 'Specialty Tempo Control' },
+        ],
+        hucking: [
+          { key: 'hucking_confidence', label: 'Hucking Confidence' },
+          { key: 'hucking_shape_control', label: 'Hucking Shape Control' },
+          { key: 'hucking_tempo_control', label: 'Hucking Tempo Control' },
+          { key: 'hucking_placement', label: 'Hucking Placement' },
+        ],
+      },
+    },
+    defensive: [
+      { key: 'normal_marking', label: 'Normal Marking' },
+      { key: 'sideline_trap_marking', label: 'Sideline Trap Marking' },
+      { key: 'downfield_defending', label: 'Downfield Defending' },
+      { key: 'handler_defending', label: 'Handler Defending' },
+      { key: 'defensive_pattern_recognition', label: 'Pattern Recognition' },
+      { key: 'help_defense', label: 'Help Defense' },
+      { key: 'switching_on_defense', label: 'Switching on Defense' },
+      { key: 'zone_defense', label: 'Zone Defense' },
+      { key: 'defensive_mental_fortitude', label: 'Defensive Mental Fortitude' },
+    ],
+    mental: [
+      { key: 'mental_game', label: 'Mental Game' },
+      { key: 'feedback_implementation', label: 'Feedback Implementation' },
+      { key: 'defensive_strategy', label: 'Defensive Team Strategy' },
+      { key: 'offensive_strategy', label: 'Offensive Team Strategy' },
+    ],
+  });
+
+  // 3.4) We'll keep track of the active tab, default to "home"
+  const [activeTab, setActiveTab] = useState('home');
+
+  // 3.5) Precompute the main category averages for radial tab display
+  const [averages, setAverages] = useState({});
+  useEffect(() => {
+    if (selectedAthlete) {
+      const newAvg = computeCategoryAverages(selectedAthlete);
+      setAverages(newAvg);
+    }
+  }, [selectedAthlete]);
+
+  // 3.6) Radar example for “Throw Comparison” inside Offensive
+  const radarLabels = [
+    'Backhand Power',
+    'Forehand Power',
+    'Specialty Power',
+    'Backhand Accuracy',
+    'Forehand Accuracy',
+    'Specialty Accuracy',
+  ];
+  const radarDataValues = [
+    selectedAthlete.skills.backhand_power,
+    selectedAthlete.skills.forehand_power,
+    selectedAthlete.skills.specialty_power,
+    selectedAthlete.skills.backhand_accuracy,
+    selectedAthlete.skills.forehand_accuracy,
+    selectedAthlete.skills.specialty_accuracy,
+  ];
+
+  useEffect(() => {
+    const handleOnline = () => {
+      setIsOnline(true);
+      SyncManager.processSyncQueue();
+    };
+    const handleOffline = () => setIsOnline(false);
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
+  /* -------------------------------------
+     RENDER
+  -------------------------------------- */
+  return (
+    
+    <div className="min-h-screen bg-gray-900 text-gray-100 flex flex-col">
+            {!isOnline && (
+        <div className="bg-yellow-600 text-white px-4 py-2 text-center">
+          You're offline. Some features may be limited.
+        </div>
+      )}
+      <InstallPrompt />
+      {/** 1) Profile Header at the top */}
+      <ProfileHeader
+        name={selectedAthlete.metadata.name}
+        email={selectedAthlete.metadata.email}
+        overallScore={
+          activeTab === 'home'
+            ? computeOverallScore(selectedAthlete)
+            : averages[activeTab] || 0
+        }
+        athletes={mockData}
+        selectedAthleteId={selectedAthleteId}
+        onSelectAthlete={(id) => setSelectedAthleteId(id)} // Pass a handler
+      />
+
+      {/** 3) The radial nav row (icons + radial) for Home, Physical, Offensive, Defensive, Mental */}
+      <RadialTabs
+        activeTab={activeTab}
+        onChangeTab={setActiveTab}
+        averages={averages}
+      />
+
+      {/** 4) Scrollable content below the radial nav */}
+      <div className="flex-1 overflow-auto px-4 pb-8 mt-4">
+        {/** HOME (Dashboard) */}
+        {activeTab === 'home' && (
+          <HomeSection player={selectedAthlete} />
+        )}
+
+        {/** PHYSICAL */}
+        {activeTab === 'physical' && (
+          <CategorySection
+            title="Physical Attributes"
+            skills={getCategoryData(selectedAthlete).physical}
+            player={selectedAthlete.skills}
+          />
+        )}
+
+        {/** OFFENSIVE */}
+        {activeTab === 'offensive' && (
+          <>
+            <OffensiveSection
+              offensiveData={getCategoryData(selectedAthlete).offensive}
+              player={selectedAthlete.skills}
+            />
+            {/* Example: A Throw Comparison Radar Chart */}
+            <div className="mt-6">
+              <h2 className="text-xl font-semibold mb-2 text-gray-100">
+                Throw Comparison
+              </h2>
+              <RadarChart labels={radarLabels} dataValues={radarDataValues} />
+            </div>
+          </>
+        )}
+
+        {/** DEFENSIVE */}
+        {activeTab === 'defensive' && (
+          <CategorySection
+            title="Defensive Skills"
+            skills={getCategoryData(selectedAthlete).defensive}
+            player={selectedAthlete.skills}
+          />
+        )}
+
+        {/** MENTAL */}
+        {activeTab === 'mental' && (
+          <CategorySection
+            title="Mental & Recovery"
+            skills={getCategoryData(selectedAthlete).mental}
+            player={selectedAthlete.skills}
+          />
+        )}
+
+        {/* Roadmap Modal */}
+        <RoadmapModal 
+        isOpen={isRoadmapOpen}
+        onClose={() => setRoadmapOpen(false)}
+        player={selectedAthlete}
+      />
+          <FloatingActionButton onClick={() => setRoadmapOpen(true)} />
+    
+    <RoadmapModal 
+      isOpen={isRoadmapOpen}
+      onClose={() => setRoadmapOpen(false)}
+      player={selectedAthlete}
+    />
+      </div>
+    </div>
+  );
+}
+
+export default Dashboard;
+
+
 File: src\data\mockData.js
 ================================================================================
 
@@ -5860,20 +7073,99 @@ File: src\serviceWorkerRegistration.js
 ================================================================================
 
 // src/serviceWorkerRegistration.js
-export function registerServiceWorker() {
-    if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker
-          .register('/service-worker.js')
-          .then((registration) => {
-            console.log('SW registered:', registration);
-          })
-          .catch((error) => {
-            console.log('SW registration failed:', error);
-          });
-      });
-    }
+
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding)
+    .replace(/-/g, '+')
+    .replace(/_/g, '/');
+
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+
+  for (let i = 0; i < rawData.length; ++i) {
+    outputArray[i] = rawData.charCodeAt(i);
   }
+  return outputArray;
+}
+
+export function registerServiceWorker() {
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', async () => {
+      try {
+        // First check if there's an existing registration
+        const existingRegistration = await navigator.serviceWorker.getRegistration();
+        
+        if (existingRegistration) {
+          console.log('[SW] Found existing registration:', existingRegistration);
+          return;
+        }
+
+        const registration = await navigator.serviceWorker.register('/service-worker.js');
+        console.log('[SW] Registration successful:', registration);
+
+        // Listen for updates
+        registration.addEventListener('updatefound', () => {
+          const newWorker = registration.installing;
+          console.log('[SW] New worker being installed:', newWorker?.state);
+
+          newWorker?.addEventListener('statechange', () => {
+            console.log('[SW] New worker state:', newWorker.state);
+          });
+        });
+
+        // Optional: Set up periodic updates
+        setInterval(async () => {
+          try {
+            await registration.update();
+            console.log('[SW] Checked for updates');
+          } catch (error) {
+            console.error('[SW] Update check failed:', error);
+          }
+        }, 1000 * 60 * 60); // Check every hour
+
+        // Optional: Subscribe to push notifications
+        if ('PushManager' in window) {
+          try {
+            const subscription = await registration.pushManager.getSubscription();
+            if (!subscription) {
+              // You would need to replace this with your VAPID public key
+              const vapidPublicKey = 'YOUR_VAPID_PUBLIC_KEY';
+              const convertedVapidKey = urlBase64ToUint8Array(vapidPublicKey);
+              
+              await registration.pushManager.subscribe({
+                userVisibleOnly: true,
+                applicationServerKey: convertedVapidKey
+              });
+              console.log('[SW] Push notification subscription successful');
+            }
+          } catch (error) {
+            console.error('[SW] Push subscription failed:', error);
+          }
+        }
+
+      } catch (error) {
+        console.error('[SW] Service worker registration failed:', error);
+      }
+    });
+
+    // Handle service worker updates
+    let refreshing = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (!refreshing) {
+        refreshing = true;
+        window.location.reload();
+      }
+    });
+
+    // Handle messages from service worker
+    navigator.serviceWorker.addEventListener('message', (event) => {
+      console.log('[SW] Received message:', event.data);
+    });
+  } else {
+    console.log('[SW] Service workers are not supported');
+  }
+}
 
 File: src\setupTests.js
 ================================================================================

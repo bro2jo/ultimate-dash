@@ -1,14 +1,22 @@
-const CACHE_NAME = 'ultperf-cache-v1';
+const CACHE_NAME = 'ultify-cache-v1';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
   '/manifest.json',
   '/static/css/main.css',
   '/static/js/main.js',
+  '/images/preview-image.png',
+  '/favicon.svg',
+  '/icons/icon-72x72.png',
+  '/icons/icon-144x144.png',
+  '/icons/icon-192x192.png',
+  '/icons/icon-256x256.png',
+  '/icons/icon-384x384.png',
+  '/icons/icon-512x512.png',
   // Add paths to your key assets
 ];
 
-const DATA_CACHE_NAME = 'ultperf-data-v1';
+const DATA_CACHE_NAME = 'ultify-data-v1';
 
 // Install Service Worker
 self.addEventListener('install', (event) => {

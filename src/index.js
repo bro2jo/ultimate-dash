@@ -6,6 +6,7 @@ import App from './App.jsx';
 import { BrowserRouter } from 'react-router-dom'; // Import BrowserRouter
 import { registerServiceWorker } from './serviceWorkerRegistration';
 
+
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(
   <React.StrictMode>
@@ -17,3 +18,8 @@ root.render(
   </React.StrictMode>
 );
 registerServiceWorker();
+if (navigator.serviceWorker.controller) {
+  console.log('[SW] Service worker is controlling the page');
+} else {
+  console.warn('[SW] Service worker is NOT controlling the page');
+}
