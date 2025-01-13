@@ -1,6 +1,6 @@
 Project: performance-app
 Version: 0.1.0
-Generated: 2025-01-12T23:40:35.390Z
+Generated: 2025-01-13T01:07:57.633Z
 ================================================================================
 
 File: concat-files.js
@@ -177,17 +177,25 @@ module.exports = {
 File: public\service-worker.js
 ================================================================================
 
-const CACHE_NAME = 'ultperf-cache-v1';
+const CACHE_NAME = 'ultify-cache-v1';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
   '/manifest.json',
   '/static/css/main.css',
   '/static/js/main.js',
+  '/images/preview-image.png',
+  '/favicon.svg',
+  '/icons/icon-72x72.png',
+  '/icons/icon-144x144.png',
+  '/icons/icon-192x192.png',
+  '/icons/icon-256x256.png',
+  '/icons/icon-384x384.png',
+  '/icons/icon-512x512.png',
   // Add paths to your key assets
 ];
 
-const DATA_CACHE_NAME = 'ultperf-data-v1';
+const DATA_CACHE_NAME = 'ultify-data-v1';
 
 // Install Service Worker
 self.addEventListener('install', (event) => {
@@ -1071,7 +1079,7 @@ export function InstallPrompt() {
 
     // Check if running in standalone mode
     const isStandalone = window.matchMedia('(display-mode: standalone)').matches 
-      || (window.navigator.standalone) 
+      || window.navigator.standalone 
       || document.referrer.includes('android-app://');
       
     console.log('[InstallPrompt] Is standalone:', isStandalone);
@@ -1093,24 +1101,20 @@ export function InstallPrompt() {
       setDebugInfo(prev => ({ ...prev, promptEventReceived: true }));
     };
 
-    // The beforeinstallprompt event may have fired before our listener
-    // was registered. Check if it's stored in window
-    if (window.deferredPrompt) {
-      console.log('[InstallPrompt] Found existing deferredPrompt');
-      handleBeforeInstallPrompt(window.deferredPrompt);
-    }
-
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
 
-    // Check if app was installed
-    window.addEventListener('appinstalled', (e) => {
+    // Listen for appinstalled event
+    const handleAppInstalled = (e) => {
       console.log('[InstallPrompt] App was installed', e);
-      localStorage.setItem('appInstalled', 'true');
+      localStorage.setItem('installPromptShown', 'true');
       setInstallPrompt(null);
-    });
+    };
 
+    window.addEventListener('appinstalled', handleAppInstalled);
+    
     return () => {
       window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+      window.removeEventListener('appinstalled', handleAppInstalled);
     };
   }, []);
 
@@ -1130,9 +1134,16 @@ export function InstallPrompt() {
 
     try {
       console.log('[InstallPrompt] Triggering install prompt');
-      const result = await installPrompt.prompt();
+      installPrompt.prompt();
+      const result = await installPrompt.userChoice;
       console.log('[InstallPrompt] Install prompt result:', result);
+      if (result.outcome === 'accepted') {
+        console.log('[InstallPrompt] User accepted the install prompt');
+      } else {
+        console.log('[InstallPrompt] User dismissed the install prompt');
+      }
       setInstallPrompt(null);
+      localStorage.setItem('installPromptShown', 'true');
     } catch (error) {
       console.error('[InstallPrompt] Error installing app:', error);
     }
@@ -1141,12 +1152,17 @@ export function InstallPrompt() {
   const handleDismiss = () => {
     console.log('[InstallPrompt] Prompt dismissed');
     setInstallPrompt(null);
-    localStorage.setItem('installPromptDismissed', Date.now().toString());
+    localStorage.setItem('installPromptShown', 'true');
   };
 
   // Early return conditions
   if (debugInfo.isStandalone) {
     console.log('[InstallPrompt] App is installed, not showing prompt');
+    return null;
+  }
+
+  if (debugInfo.hasShownPrompt) {
+    console.log('[InstallPrompt] Install prompt has already been shown');
     return null;
   }
 
@@ -1183,6 +1199,7 @@ export function InstallPrompt() {
     </div>
   );
 }
+
 
 File: src\components\LoadingState.jsx
 ================================================================================
@@ -3484,6 +3501,7 @@ import App from './App.jsx';
 import { BrowserRouter } from 'react-router-dom'; // Import BrowserRouter
 import { registerServiceWorker } from './serviceWorkerRegistration';
 
+
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(
   <React.StrictMode>
@@ -3495,6 +3513,11 @@ root.render(
   </React.StrictMode>
 );
 registerServiceWorker();
+if (navigator.serviceWorker.controller) {
+  console.log('[SW] Service worker is controlling the page');
+} else {
+  console.warn('[SW] Service worker is NOT controlling the page');
+}
 
 
 File: src\reportWebVitals.js
@@ -3520,82 +3543,47 @@ File: src\serviceWorkerRegistration.js
 
 // src/serviceWorkerRegistration.js
 
-function urlBase64ToUint8Array(base64String) {
-  const padding = '='.repeat((4 - base64String.length % 4) % 4);
-  const base64 = (base64String + padding)
-    .replace(/-/g, '+')
-    .replace(/_/g, '/');
-
-  const rawData = window.atob(base64);
-  const outputArray = new Uint8Array(rawData.length);
-
-  for (let i = 0; i < rawData.length; ++i) {
-    outputArray[i] = rawData.charCodeAt(i);
-  }
-  return outputArray;
-}
-
 export function registerServiceWorker() {
   if ('serviceWorker' in navigator) {
-    window.addEventListener('load', async () => {
-      try {
-        // First check if there's an existing registration
-        const existingRegistration = await navigator.serviceWorker.getRegistration();
-        
-        if (existingRegistration) {
-          console.log('[SW] Found existing registration:', existingRegistration);
-          return;
-        }
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('/service-worker.js')
+        .then((registration) => {
+          console.log('[SW] Registration successful:', registration);
 
-        const registration = await navigator.serviceWorker.register('/service-worker.js');
-        console.log('[SW] Registration successful:', registration);
+          // Listen for updates to the service worker.
+          registration.addEventListener('updatefound', () => {
+            const newWorker = registration.installing;
+            console.log('[SW] New worker being installed:', newWorker);
 
-        // Listen for updates
-        registration.addEventListener('updatefound', () => {
-          const newWorker = registration.installing;
-          console.log('[SW] New worker being installed:', newWorker?.state);
-
-          newWorker?.addEventListener('statechange', () => {
-            console.log('[SW] New worker state:', newWorker.state);
+            newWorker.addEventListener('statechange', () => {
+              console.log('[SW] New worker state:', newWorker.state);
+              if (newWorker.state === 'installed') {
+                if (navigator.serviceWorker.controller) {
+                  // New update available
+                  console.log('[SW] New update available');
+                  // Optionally, notify the user about the update
+                } else {
+                  // Content cached for offline use
+                  console.log('[SW] Content cached for offline use');
+                }
+              }
+            });
           });
+
+          // Check for controlling service worker
+          if (navigator.serviceWorker.controller) {
+            console.log('[SW] Service worker is controlling the page');
+          } else {
+            console.log('[SW] Service worker is NOT controlling the page');
+          }
+
+        })
+        .catch((error) => {
+          console.error('[SW] Service worker registration failed:', error);
         });
-
-        // Optional: Set up periodic updates
-        setInterval(async () => {
-          try {
-            await registration.update();
-            console.log('[SW] Checked for updates');
-          } catch (error) {
-            console.error('[SW] Update check failed:', error);
-          }
-        }, 1000 * 60 * 60); // Check every hour
-
-        // Optional: Subscribe to push notifications
-        if ('PushManager' in window) {
-          try {
-            const subscription = await registration.pushManager.getSubscription();
-            if (!subscription) {
-              // You would need to replace this with your VAPID public key
-              const vapidPublicKey = 'YOUR_VAPID_PUBLIC_KEY';
-              const convertedVapidKey = urlBase64ToUint8Array(vapidPublicKey);
-              
-              await registration.pushManager.subscribe({
-                userVisibleOnly: true,
-                applicationServerKey: convertedVapidKey
-              });
-              console.log('[SW] Push notification subscription successful');
-            }
-          } catch (error) {
-            console.error('[SW] Push subscription failed:', error);
-          }
-        }
-
-      } catch (error) {
-        console.error('[SW] Service worker registration failed:', error);
-      }
     });
 
-    // Handle service worker updates
+    // Reload the page when the service worker updates
     let refreshing = false;
     navigator.serviceWorker.addEventListener('controllerchange', () => {
       if (!refreshing) {
@@ -3604,7 +3592,7 @@ export function registerServiceWorker() {
       }
     });
 
-    // Handle messages from service worker
+    // Handle messages from the service worker
     navigator.serviceWorker.addEventListener('message', (event) => {
       console.log('[SW] Received message:', event.data);
     });
@@ -3612,6 +3600,7 @@ export function registerServiceWorker() {
     console.log('[SW] Service workers are not supported');
   }
 }
+
 
 File: src\setupTests.js
 ================================================================================
@@ -4625,7 +4614,7 @@ export function InstallPrompt() {
 
     // Check if running in standalone mode
     const isStandalone = window.matchMedia('(display-mode: standalone)').matches 
-      || (window.navigator.standalone) 
+      || window.navigator.standalone 
       || document.referrer.includes('android-app://');
       
     console.log('[InstallPrompt] Is standalone:', isStandalone);
@@ -4647,24 +4636,20 @@ export function InstallPrompt() {
       setDebugInfo(prev => ({ ...prev, promptEventReceived: true }));
     };
 
-    // The beforeinstallprompt event may have fired before our listener
-    // was registered. Check if it's stored in window
-    if (window.deferredPrompt) {
-      console.log('[InstallPrompt] Found existing deferredPrompt');
-      handleBeforeInstallPrompt(window.deferredPrompt);
-    }
-
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
 
-    // Check if app was installed
-    window.addEventListener('appinstalled', (e) => {
+    // Listen for appinstalled event
+    const handleAppInstalled = (e) => {
       console.log('[InstallPrompt] App was installed', e);
-      localStorage.setItem('appInstalled', 'true');
+      localStorage.setItem('installPromptShown', 'true');
       setInstallPrompt(null);
-    });
+    };
 
+    window.addEventListener('appinstalled', handleAppInstalled);
+    
     return () => {
       window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+      window.removeEventListener('appinstalled', handleAppInstalled);
     };
   }, []);
 
@@ -4684,9 +4669,16 @@ export function InstallPrompt() {
 
     try {
       console.log('[InstallPrompt] Triggering install prompt');
-      const result = await installPrompt.prompt();
+      installPrompt.prompt();
+      const result = await installPrompt.userChoice;
       console.log('[InstallPrompt] Install prompt result:', result);
+      if (result.outcome === 'accepted') {
+        console.log('[InstallPrompt] User accepted the install prompt');
+      } else {
+        console.log('[InstallPrompt] User dismissed the install prompt');
+      }
       setInstallPrompt(null);
+      localStorage.setItem('installPromptShown', 'true');
     } catch (error) {
       console.error('[InstallPrompt] Error installing app:', error);
     }
@@ -4695,12 +4687,17 @@ export function InstallPrompt() {
   const handleDismiss = () => {
     console.log('[InstallPrompt] Prompt dismissed');
     setInstallPrompt(null);
-    localStorage.setItem('installPromptDismissed', Date.now().toString());
+    localStorage.setItem('installPromptShown', 'true');
   };
 
   // Early return conditions
   if (debugInfo.isStandalone) {
     console.log('[InstallPrompt] App is installed, not showing prompt');
+    return null;
+  }
+
+  if (debugInfo.hasShownPrompt) {
+    console.log('[InstallPrompt] Install prompt has already been shown');
     return null;
   }
 
@@ -4737,6 +4734,7 @@ export function InstallPrompt() {
     </div>
   );
 }
+
 
 File: src\components\LoadingState.jsx
 ================================================================================
@@ -7038,6 +7036,7 @@ import App from './App.jsx';
 import { BrowserRouter } from 'react-router-dom'; // Import BrowserRouter
 import { registerServiceWorker } from './serviceWorkerRegistration';
 
+
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(
   <React.StrictMode>
@@ -7049,6 +7048,11 @@ root.render(
   </React.StrictMode>
 );
 registerServiceWorker();
+if (navigator.serviceWorker.controller) {
+  console.log('[SW] Service worker is controlling the page');
+} else {
+  console.warn('[SW] Service worker is NOT controlling the page');
+}
 
 
 File: src\reportWebVitals.js
@@ -7074,82 +7078,47 @@ File: src\serviceWorkerRegistration.js
 
 // src/serviceWorkerRegistration.js
 
-function urlBase64ToUint8Array(base64String) {
-  const padding = '='.repeat((4 - base64String.length % 4) % 4);
-  const base64 = (base64String + padding)
-    .replace(/-/g, '+')
-    .replace(/_/g, '/');
-
-  const rawData = window.atob(base64);
-  const outputArray = new Uint8Array(rawData.length);
-
-  for (let i = 0; i < rawData.length; ++i) {
-    outputArray[i] = rawData.charCodeAt(i);
-  }
-  return outputArray;
-}
-
 export function registerServiceWorker() {
   if ('serviceWorker' in navigator) {
-    window.addEventListener('load', async () => {
-      try {
-        // First check if there's an existing registration
-        const existingRegistration = await navigator.serviceWorker.getRegistration();
-        
-        if (existingRegistration) {
-          console.log('[SW] Found existing registration:', existingRegistration);
-          return;
-        }
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('/service-worker.js')
+        .then((registration) => {
+          console.log('[SW] Registration successful:', registration);
 
-        const registration = await navigator.serviceWorker.register('/service-worker.js');
-        console.log('[SW] Registration successful:', registration);
+          // Listen for updates to the service worker.
+          registration.addEventListener('updatefound', () => {
+            const newWorker = registration.installing;
+            console.log('[SW] New worker being installed:', newWorker);
 
-        // Listen for updates
-        registration.addEventListener('updatefound', () => {
-          const newWorker = registration.installing;
-          console.log('[SW] New worker being installed:', newWorker?.state);
-
-          newWorker?.addEventListener('statechange', () => {
-            console.log('[SW] New worker state:', newWorker.state);
+            newWorker.addEventListener('statechange', () => {
+              console.log('[SW] New worker state:', newWorker.state);
+              if (newWorker.state === 'installed') {
+                if (navigator.serviceWorker.controller) {
+                  // New update available
+                  console.log('[SW] New update available');
+                  // Optionally, notify the user about the update
+                } else {
+                  // Content cached for offline use
+                  console.log('[SW] Content cached for offline use');
+                }
+              }
+            });
           });
+
+          // Check for controlling service worker
+          if (navigator.serviceWorker.controller) {
+            console.log('[SW] Service worker is controlling the page');
+          } else {
+            console.log('[SW] Service worker is NOT controlling the page');
+          }
+
+        })
+        .catch((error) => {
+          console.error('[SW] Service worker registration failed:', error);
         });
-
-        // Optional: Set up periodic updates
-        setInterval(async () => {
-          try {
-            await registration.update();
-            console.log('[SW] Checked for updates');
-          } catch (error) {
-            console.error('[SW] Update check failed:', error);
-          }
-        }, 1000 * 60 * 60); // Check every hour
-
-        // Optional: Subscribe to push notifications
-        if ('PushManager' in window) {
-          try {
-            const subscription = await registration.pushManager.getSubscription();
-            if (!subscription) {
-              // You would need to replace this with your VAPID public key
-              const vapidPublicKey = 'YOUR_VAPID_PUBLIC_KEY';
-              const convertedVapidKey = urlBase64ToUint8Array(vapidPublicKey);
-              
-              await registration.pushManager.subscribe({
-                userVisibleOnly: true,
-                applicationServerKey: convertedVapidKey
-              });
-              console.log('[SW] Push notification subscription successful');
-            }
-          } catch (error) {
-            console.error('[SW] Push subscription failed:', error);
-          }
-        }
-
-      } catch (error) {
-        console.error('[SW] Service worker registration failed:', error);
-      }
     });
 
-    // Handle service worker updates
+    // Reload the page when the service worker updates
     let refreshing = false;
     navigator.serviceWorker.addEventListener('controllerchange', () => {
       if (!refreshing) {
@@ -7158,7 +7127,7 @@ export function registerServiceWorker() {
       }
     });
 
-    // Handle messages from service worker
+    // Handle messages from the service worker
     navigator.serviceWorker.addEventListener('message', (event) => {
       console.log('[SW] Received message:', event.data);
     });
@@ -7166,6 +7135,7 @@ export function registerServiceWorker() {
     console.log('[SW] Service workers are not supported');
   }
 }
+
 
 File: src\setupTests.js
 ================================================================================

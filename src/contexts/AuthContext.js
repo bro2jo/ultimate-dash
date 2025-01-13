@@ -12,15 +12,14 @@ import {
 import { initializeApp } from 'firebase/app';
 import { sendPasswordResetEmail } from 'firebase/auth';
 
-
 const firebaseConfig = {
-  apiKey: "AIzaSyC7rcVKPWvdvKVOUKPiX4j9av0rTByBVoE",
-  authDomain: "ultify-dash.firebaseapp.com",
-  projectId: "ultify-dash",
-  storageBucket: "ultify-dash.firebasestorage.app",
-  messagingSenderId: "408112418111",
-  appId: "1:408112418111:web:f766cebe2e2115125a978a",
-  measurementId: "G-NK04C3E3Q0"
+  apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
+  authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.REACT_APP_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.REACT_APP_FIREBASE_APP_ID,
+  measurementId: process.env.REACT_APP_FIREBASE_MEASUREMENT_ID
 };
 
 // Initialize Firebase
