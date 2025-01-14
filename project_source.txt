@@ -1,6 +1,6 @@
 Project: performance-app
 Version: 0.1.0
-Generated: 2025-01-13T16:01:57.908Z
+Generated: 2025-01-14T23:05:58.370Z
 ================================================================================
 
 File: concat-files.js
@@ -642,24 +642,40 @@ File: src\App.css
 File: src\App.jsx
 ================================================================================
 
-// src/App.jsx
+import { lazy, Suspense } from 'react';
 import { Routes, Route } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
-import ProtectedRoute from './components/auth/ProtectedRoute';
-import LoginPage from './components/auth/LoginPage';
-import Dashboard from './Dashboard'; // Rename your current App content to Dashboard
+import { LoadingState } from './components/LoadingState';
+
+// Lazy load components
+const LoginPage = lazy(() => import('./components/auth/LoginPage'));
+const Dashboard = lazy(() => import('./Dashboard'));
+const ProtectedRoute = lazy(() => import('./components/auth/ProtectedRoute'));
 
 function App() {
   return (
     <AuthProvider>
       <Routes>
-        <Route path="/login" element={<LoginPage />} />
+        <Route 
+          path="/login" 
+          element={
+            <Suspense fallback={
+              <div className="min-h-screen bg-gray-900 flex items-center justify-center">
+                <h1 className="text-xl text-gray-200">Welcome back</h1>
+              </div>
+            }>
+              <LoginPage />
+            </Suspense>
+          } 
+        />
         <Route
           path="/*"
           element={
-            <ProtectedRoute>
-              <Dashboard />
-            </ProtectedRoute>
+            <Suspense fallback={<LoadingState />}>
+              <ProtectedRoute>
+                <Dashboard />
+              </ProtectedRoute>
+            </Suspense>
           }
         />
       </Routes>
@@ -2865,9 +2881,19 @@ const firebaseConfig = {
   measurementId: process.env.REACT_APP_FIREBASE_MEASUREMENT_ID
 };
 
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
-const analytics = getAnalytics(app);
+let app = null;
+let analytics = null;
+
+export const initializeFirebase = () => {
+  if (!app) {
+    app = initializeApp(firebaseConfig);
+    // Defer analytics initialization
+    setTimeout(() => {
+      analytics = getAnalytics(app);
+    }, 2000);
+  }
+  return app;
+};
 
 export { app };
 
@@ -2876,33 +2902,20 @@ File: src\contexts\AuthContext.js
 
 // src/contexts/AuthContext.js
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { 
-  getAuth,
-  signInWithEmailAndPassword, 
-  createUserWithEmailAndPassword,
-  signInWithPopup,
-  GoogleAuthProvider,
-  signOut,
-  onAuthStateChanged
-} from 'firebase/auth';
-import { initializeApp } from 'firebase/app';
-import { sendPasswordResetEmail } from 'firebase/auth';
-
-const firebaseConfig = {
-  apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
-  authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN,
-  projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID,
-  storageBucket: process.env.REACT_APP_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID,
-  appId: process.env.REACT_APP_FIREBASE_APP_ID,
-  measurementId: process.env.REACT_APP_FIREBASE_MEASUREMENT_ID
-};
-
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
+import { getAuth } from 'firebase/auth';
+import { initializeFirebase } from '../config/firebase';
 
 const AuthContext = createContext({});
+
+// Lazy imports for auth methods
+const lazyImportAuth = () => import('firebase/auth').then(module => ({
+  signInWithEmailAndPassword: module.signInWithEmailAndPassword,
+  createUserWithEmailAndPassword: module.createUserWithEmailAndPassword,
+  signInWithPopup: module.signInWithPopup,
+  GoogleAuthProvider: module.GoogleAuthProvider,
+  signOut: module.signOut,
+  sendPasswordResetEmail: module.sendPasswordResetEmail
+}));
 
 export function useAuth() {
   return useContext(AuthContext);
@@ -2911,36 +2924,53 @@ export function useAuth() {
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [auth, setAuth] = useState(null);
 
-  async function login(email, password) {
+  // Initialize Firebase and Auth lazily
+  useEffect(() => {
+    const initAuth = async () => {
+      const app = initializeFirebase();
+      const auth = getAuth(app);
+      setAuth(auth);
+      
+      const { onAuthStateChanged } = await import('firebase/auth');
+      const unsubscribe = onAuthStateChanged(auth, (user) => {
+        setUser(user);
+        setLoading(false);
+      });
+
+      return unsubscribe;
+    };
+
+    initAuth();
+  }, []);
+
+  // Lazy auth methods
+  const login = async (email, password) => {
+    const { signInWithEmailAndPassword } = await lazyImportAuth();
     return signInWithEmailAndPassword(auth, email, password);
-  }
+  };
 
-  async function signup(email, password) {
+  const signup = async (email, password) => {
+    const { createUserWithEmailAndPassword } = await lazyImportAuth();
     return createUserWithEmailAndPassword(auth, email, password);
-  }
+  };
 
-  async function loginWithGoogle() {
+  const loginWithGoogle = async () => {
+    const { signInWithPopup, GoogleAuthProvider } = await lazyImportAuth();
     const provider = new GoogleAuthProvider();
     return signInWithPopup(auth, provider);
-  }
+  };
 
-  async function logout() {
+  const logout = async () => {
+    const { signOut } = await lazyImportAuth();
     return signOut(auth);
-  }
+  };
 
-  async function resetPassword(email) {
+  const resetPassword = async (email) => {
+    const { sendPasswordResetEmail } = await lazyImportAuth();
     return sendPasswordResetEmail(auth, email);
-  }
-
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setUser(user);
-      setLoading(false);
-    });
-
-    return unsubscribe;
-  }, []);
+  };
 
   const value = {
     user,
@@ -2948,12 +2978,25 @@ export function AuthProvider({ children }) {
     signup,
     loginWithGoogle,
     logout,
-    resetPassword, // Add this
+    resetPassword
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
+        <div className="text-center mb-8">
+          <h2 className="text-2xl font-bold text-white">Welcome back</h2>
+          <p className="mt-2 text-gray-400 text-sm">
+            Great to see you again! Please enter your details.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <AuthContext.Provider value={value}>
-      {!loading && children}
+      {children}
     </AuthContext.Provider>
   );
 }
@@ -3846,6 +3889,52 @@ const mockData = [
 ];
 
 export default mockData;
+
+
+File: src\hooks\usePreloadState.js
+================================================================================
+
+// src/hooks/usePreloadState.js
+import { useEffect } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext'; // Import useAuth
+
+export function usePreloadState() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const { user } = useAuth(); // Access user from AuthContext
+
+  useEffect(() => {
+    // Store current path for direct access
+    sessionStorage.setItem('last_path', location.pathname);
+
+    // Preload next likely route based on current path
+    if (location.pathname === '/login') {
+      // Preload dashboard and its dependencies
+      const preloadDashboard = async () => {
+        try {
+          // Start preloading after a short delay to prioritize login render
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          await import('../Dashboard');
+        } catch (error) {
+          console.error('Error preloading Dashboard:', error);
+        }
+      };
+      preloadDashboard();
+    }
+
+    // Handle direct access to protected routes
+    if (user && location.pathname === '/login') {
+      const lastPath = sessionStorage.getItem('last_path') || '/';
+      navigate(lastPath, { replace: true });
+    }
+  }, [location, navigate, user]);
+
+  return {
+    currentPath: location.pathname,
+    isAuthenticated: !!user, // Use user presence to determine authentication
+  };
+}
 
 
 File: src\index.css
@@ -4309,24 +4398,40 @@ File: src\App.css
 File: src\App.jsx
 ================================================================================
 
-// src/App.jsx
+import { lazy, Suspense } from 'react';
 import { Routes, Route } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
-import ProtectedRoute from './components/auth/ProtectedRoute';
-import LoginPage from './components/auth/LoginPage';
-import Dashboard from './Dashboard'; // Rename your current App content to Dashboard
+import { LoadingState } from './components/LoadingState';
+
+// Lazy load components
+const LoginPage = lazy(() => import('./components/auth/LoginPage'));
+const Dashboard = lazy(() => import('./Dashboard'));
+const ProtectedRoute = lazy(() => import('./components/auth/ProtectedRoute'));
 
 function App() {
   return (
     <AuthProvider>
       <Routes>
-        <Route path="/login" element={<LoginPage />} />
+        <Route 
+          path="/login" 
+          element={
+            <Suspense fallback={
+              <div className="min-h-screen bg-gray-900 flex items-center justify-center">
+                <h1 className="text-xl text-gray-200">Welcome back</h1>
+              </div>
+            }>
+              <LoginPage />
+            </Suspense>
+          } 
+        />
         <Route
           path="/*"
           element={
-            <ProtectedRoute>
-              <Dashboard />
-            </ProtectedRoute>
+            <Suspense fallback={<LoadingState />}>
+              <ProtectedRoute>
+                <Dashboard />
+              </ProtectedRoute>
+            </Suspense>
           }
         />
       </Routes>
@@ -6532,9 +6637,19 @@ const firebaseConfig = {
   measurementId: process.env.REACT_APP_FIREBASE_MEASUREMENT_ID
 };
 
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
-const analytics = getAnalytics(app);
+let app = null;
+let analytics = null;
+
+export const initializeFirebase = () => {
+  if (!app) {
+    app = initializeApp(firebaseConfig);
+    // Defer analytics initialization
+    setTimeout(() => {
+      analytics = getAnalytics(app);
+    }, 2000);
+  }
+  return app;
+};
 
 export { app };
 
@@ -6543,33 +6658,20 @@ File: src\contexts\AuthContext.js
 
 // src/contexts/AuthContext.js
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { 
-  getAuth,
-  signInWithEmailAndPassword, 
-  createUserWithEmailAndPassword,
-  signInWithPopup,
-  GoogleAuthProvider,
-  signOut,
-  onAuthStateChanged
-} from 'firebase/auth';
-import { initializeApp } from 'firebase/app';
-import { sendPasswordResetEmail } from 'firebase/auth';
-
-const firebaseConfig = {
-  apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
-  authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN,
-  projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID,
-  storageBucket: process.env.REACT_APP_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID,
-  appId: process.env.REACT_APP_FIREBASE_APP_ID,
-  measurementId: process.env.REACT_APP_FIREBASE_MEASUREMENT_ID
-};
-
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
+import { getAuth } from 'firebase/auth';
+import { initializeFirebase } from '../config/firebase';
 
 const AuthContext = createContext({});
+
+// Lazy imports for auth methods
+const lazyImportAuth = () => import('firebase/auth').then(module => ({
+  signInWithEmailAndPassword: module.signInWithEmailAndPassword,
+  createUserWithEmailAndPassword: module.createUserWithEmailAndPassword,
+  signInWithPopup: module.signInWithPopup,
+  GoogleAuthProvider: module.GoogleAuthProvider,
+  signOut: module.signOut,
+  sendPasswordResetEmail: module.sendPasswordResetEmail
+}));
 
 export function useAuth() {
   return useContext(AuthContext);
@@ -6578,36 +6680,53 @@ export function useAuth() {
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [auth, setAuth] = useState(null);
 
-  async function login(email, password) {
+  // Initialize Firebase and Auth lazily
+  useEffect(() => {
+    const initAuth = async () => {
+      const app = initializeFirebase();
+      const auth = getAuth(app);
+      setAuth(auth);
+      
+      const { onAuthStateChanged } = await import('firebase/auth');
+      const unsubscribe = onAuthStateChanged(auth, (user) => {
+        setUser(user);
+        setLoading(false);
+      });
+
+      return unsubscribe;
+    };
+
+    initAuth();
+  }, []);
+
+  // Lazy auth methods
+  const login = async (email, password) => {
+    const { signInWithEmailAndPassword } = await lazyImportAuth();
     return signInWithEmailAndPassword(auth, email, password);
-  }
+  };
 
-  async function signup(email, password) {
+  const signup = async (email, password) => {
+    const { createUserWithEmailAndPassword } = await lazyImportAuth();
     return createUserWithEmailAndPassword(auth, email, password);
-  }
+  };
 
-  async function loginWithGoogle() {
+  const loginWithGoogle = async () => {
+    const { signInWithPopup, GoogleAuthProvider } = await lazyImportAuth();
     const provider = new GoogleAuthProvider();
     return signInWithPopup(auth, provider);
-  }
+  };
 
-  async function logout() {
+  const logout = async () => {
+    const { signOut } = await lazyImportAuth();
     return signOut(auth);
-  }
+  };
 
-  async function resetPassword(email) {
+  const resetPassword = async (email) => {
+    const { sendPasswordResetEmail } = await lazyImportAuth();
     return sendPasswordResetEmail(auth, email);
-  }
-
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setUser(user);
-      setLoading(false);
-    });
-
-    return unsubscribe;
-  }, []);
+  };
 
   const value = {
     user,
@@ -6615,12 +6734,25 @@ export function AuthProvider({ children }) {
     signup,
     loginWithGoogle,
     logout,
-    resetPassword, // Add this
+    resetPassword
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
+        <div className="text-center mb-8">
+          <h2 className="text-2xl font-bold text-white">Welcome back</h2>
+          <p className="mt-2 text-gray-400 text-sm">
+            Great to see you again! Please enter your details.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <AuthContext.Provider value={value}>
-      {!loading && children}
+      {children}
     </AuthContext.Provider>
   );
 }
@@ -7513,6 +7645,52 @@ const mockData = [
 ];
 
 export default mockData;
+
+
+File: src\hooks\usePreloadState.js
+================================================================================
+
+// src/hooks/usePreloadState.js
+import { useEffect } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext'; // Import useAuth
+
+export function usePreloadState() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const { user } = useAuth(); // Access user from AuthContext
+
+  useEffect(() => {
+    // Store current path for direct access
+    sessionStorage.setItem('last_path', location.pathname);
+
+    // Preload next likely route based on current path
+    if (location.pathname === '/login') {
+      // Preload dashboard and its dependencies
+      const preloadDashboard = async () => {
+        try {
+          // Start preloading after a short delay to prioritize login render
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          await import('../Dashboard');
+        } catch (error) {
+          console.error('Error preloading Dashboard:', error);
+        }
+      };
+      preloadDashboard();
+    }
+
+    // Handle direct access to protected routes
+    if (user && location.pathname === '/login') {
+      const lastPath = sessionStorage.getItem('last_path') || '/';
+      navigate(lastPath, { replace: true });
+    }
+  }, [location, navigate, user]);
+
+  return {
+    currentPath: location.pathname,
+    isAuthenticated: !!user, // Use user presence to determine authentication
+  };
+}
 
 
 File: src\index.css
