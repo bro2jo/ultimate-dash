@@ -10,11 +10,9 @@ export function registerServiceWorker() {
   }
 
   // Register the service worker after the window loads
-  window.addEventListener('load', () => {
     navigator.serviceWorker
       .register('/service-worker.js')
       .then((registration) => {
-        console.log('[SW] Registration successful:', registration);
 
         // Listen for updates to the service worker
         registration.addEventListener('updatefound', () => {
@@ -40,7 +38,6 @@ export function registerServiceWorker() {
 
         // Check if the SW is already controlling the page
         if (navigator.serviceWorker.controller) {
-          console.log('[SW] Service worker is controlling the page');
         } else {
           console.log('[SW] Service worker is NOT controlling the page');
         }
@@ -48,7 +45,6 @@ export function registerServiceWorker() {
       .catch((error) => {
         console.error('[SW] Service worker registration failed:', error);
       });
-  });
 
   // Reload the page when the service worker updates to the new version
   let refreshing = false;

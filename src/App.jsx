@@ -3,6 +3,7 @@ import { Routes, Route } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import { LoadingState } from './components/LoadingState';
 
+
 // Lazy load components
 const LoginPage = lazy(() => import('./components/auth/LoginPage'));
 const Dashboard = lazy(() => import('./Dashboard'));

@@ -28,7 +28,6 @@ registerServiceWorker();
 
 // Log service worker control status
 if (navigator.serviceWorker && navigator.serviceWorker.controller) {
-  console.log('[SW] Service worker is controlling the page');
 } else {
   console.warn('[SW] Service worker is NOT controlling the page');
 }

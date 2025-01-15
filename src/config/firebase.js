@@ -44,7 +44,6 @@ export const initializeFirebase = () => {
       analytics = getAnalytics(app);
     }, 2000);
     
-    console.log("Firebase initialized successfully.");
   }
   return app;
 };
