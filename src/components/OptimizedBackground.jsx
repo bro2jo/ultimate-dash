@@ -4,15 +4,40 @@ const OptimizedBackground = () => {
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
-    // Preload the next larger image size after component mounts
-    const preloadLargerImage = new Image();
-    preloadLargerImage.src = '/images/background-lg.webp';
+    // Check if we already have a preload link for any of our background images
+    const existingPreload = document.querySelector('link[rel="preload"][href*="background"]');
+    
+    // Only add new preload if we don't already have one
+    if (!existingPreload) {
+      const isMobile = window.innerWidth < 768;
+
+      const link = document.createElement('link');
+      link.rel = 'preload';
+      link.as = 'image';
+      link.type = 'image/webp';
+
+      if (isMobile) {
+        link.href = '/images/background-mobileSm.webp';
+        link.media = '(max-width: 767px)';
+      } else {
+        link.href = '/images/background-sm.webp';
+        link.media = '(min-width: 768px)';
+      }
+
+      document.head.appendChild(link);
+
+      return () => {
+        if (link.parentNode) {
+          link.parentNode.removeChild(link);
+        }
+      };
+    }
   }, []);
 
   return (
     <>
-      {/* Placeholder while image loads */}
-      <div 
+      {/* Placeholder overlay while the main image loads */}
+      <div
         className={`absolute inset-0 bg-gradient-to-b from-gray-800 to-gray-900 transition-opacity duration-500 ${
           loaded ? 'opacity-0' : 'opacity-100'
         }`}
@@ -85,24 +110,6 @@ const OptimizedBackground = () => {
           }}
         />
       </picture>
-
-      {/* Preload tags for critical images */}
-      <link
-        rel="preload"
-        as="image"
-        href="/images/background-sm.webp"
-        type="image/webp"
-        media="(max-width: 767px)"
-        fetchpriority="high"
-      />
-      <link
-        rel="preload"
-        as="image"
-        href="/images/background-md.webp"
-        type="image/webp"
-        media="(min-width: 768px)"
-        fetchpriority="high"
-      />
     </>
   );
 };

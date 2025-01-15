@@ -1,24 +1,15 @@
-// src/components/LoadingState.jsx
-export function LoadingState() {
+export function LoadingState({ size = 'h-16 w-16', color = 'emerald-500', text = 'Loading...' }) {
   return (
-    <div className="min-h-screen w-full">
-      {/* Background placeholder */}
-      <div 
-        className="absolute inset-0 bg-gradient-to-b from-gray-800 to-gray-900 animate-pulse"
-        style={{
-          backgroundSize: 'cover',
-          backgroundPosition: 'center',
-        }}
-      />
-      
-      {/* Loading spinner overlay */}
-      <div className="relative z-10 flex items-center justify-center min-h-screen">
-        <div className="flex flex-col items-center gap-4">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-emerald-500" />
-          <div className="text-gray-300 text-sm animate-pulse">
-            Loading...
-          </div>
-        </div>
+    <div className="fixed inset-0 flex items-center justify-center bg-gray-900 bg-opacity-75 z-50">
+      <div className="flex flex-col items-center gap-4">
+        {/* Loading Spinner */}
+        <div
+          className={`animate-spin rounded-full ${size} border-t-4 border-b-4 border-${color}`}
+          role="status"
+          aria-label="Loading"
+        />
+        {/* Loading Text */}
+        <div className="text-gray-300 text-lg">{text}</div>
       </div>
     </div>
   );

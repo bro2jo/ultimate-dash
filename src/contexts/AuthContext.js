@@ -2,6 +2,8 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { getAuth } from 'firebase/auth';
 import { initializeFirebase } from '../config/firebase';
+import { LoadingState } from '../components/LoadingState'; // adjust import path if needed
+
 
 const AuthContext = createContext({});
 
@@ -80,16 +82,7 @@ export function AuthProvider({ children }) {
   };
 
   if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
-        <div className="text-center mb-8">
-          <h2 className="text-2xl font-bold text-white">Welcome back</h2>
-          <p className="mt-2 text-gray-400 text-sm">
-            Great to see you again! Please enter your details.
-          </p>
-        </div>
-      </div>
-    );
+    return <LoadingState />;
   }
 
   return (
@@ -98,3 +91,4 @@ export function AuthProvider({ children }) {
     </AuthContext.Provider>
   );
 }
+

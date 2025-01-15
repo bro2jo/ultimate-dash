@@ -1,8 +1,12 @@
-const CACHE_NAME = 'ultify-cache-v2'; // Increment version for updates
+/* -----------------------------------------
+   service-worker.js (Refactored & Enhanced)
+-------------------------------------------- */
+
+const CACHE_NAME = 'ultify-cache-v2';      // Increment for static assets
 const IMAGE_CACHE_NAME = 'ultify-images-v1';
 const DATA_CACHE_NAME = 'ultify-data-v1';
 
-// Static assets to cache immediately
+// Static assets to be cached immediately
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -12,7 +16,7 @@ const STATIC_ASSETS = [
   '/favicon.svg',
 ];
 
-// Image assets to cache on first use
+// Images that can be cached on first use
 const IMAGE_ASSETS = [
   '/images/background-sm.webp',
   '/images/background-md.webp',
@@ -29,173 +33,223 @@ const IMAGE_ASSETS = [
   '/icons/icon-512x512.png',
 ];
 
-// Install Service Worker
+/* 
+  1) INSTALL
+     - Cache essential assets
+     - Preload small placeholder image
+*/
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    Promise.all([
-      // Cache static assets immediately
-      caches.open(CACHE_NAME).then((cache) => {
-        return cache.addAll(STATIC_ASSETS);
-      }),
-      // Pre-cache the tiny placeholder image
-      caches.open(IMAGE_CACHE_NAME).then((cache) => {
-        return cache.add('/images/background-placeholder.webp');
-      })
-    ])
+    (async () => {
+      const staticCache = await caches.open(CACHE_NAME);
+      await staticCache.addAll(STATIC_ASSETS);
+
+      // Pre-cache placeholder image
+      const imgCache = await caches.open(IMAGE_CACHE_NAME);
+      await imgCache.add('/images/background-placeholder.webp');
+    })()
   );
+
+  // Take control immediately
   self.skipWaiting();
 });
 
-// Activate and Clean up old caches
+/* 
+  2) ACTIVATE
+     - Clean up old caches
+     - Notify clients of updates
+*/
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((cacheNames) => {
-      return Promise.all(
-        cacheNames
-          .filter((cacheName) => {
-            // Remove any cache that doesn't match our current versions
-            return (
-              cacheName !== CACHE_NAME &&
-              cacheName !== DATA_CACHE_NAME &&
-              cacheName !== IMAGE_CACHE_NAME
-            );
-          })
-          .map((cacheName) => {
-            return caches.delete(cacheName);
-          })
-      );
-    }).then(() => {
-      // Notify clients about the update
-      self.clients.matchAll().then(clients => {
-        clients.forEach(client => client.postMessage({ type: 'CACHE_UPDATED' }));
-      });
-    })
+    (async () => {
+      const cacheNames = await caches.keys();
+      const deletionPromises = cacheNames
+        .filter((cacheName) => {
+          return (
+            cacheName !== CACHE_NAME &&
+            cacheName !== DATA_CACHE_NAME &&
+            cacheName !== IMAGE_CACHE_NAME
+          );
+        })
+        .map((cacheName) => caches.delete(cacheName));
+
+      await Promise.all(deletionPromises);
+
+      // Notify all clients
+      const clientsList = await self.clients.matchAll();
+      for (const client of clientsList) {
+        client.postMessage({ type: 'CACHE_UPDATED' });
+      }
+    })()
   );
+
   self.clients.claim();
 });
 
-// Helper function to check if request is for an image
+/* 
+  Helper: isImageRequest
+     Checks if the request is for an image
+*/
 function isImageRequest(request) {
-  return request.destination === 'image' || 
-         IMAGE_ASSETS.some(asset => request.url.includes(asset));
+  return (
+    request.destination === 'image' ||
+    IMAGE_ASSETS.some((asset) => request.url.includes(asset))
+  );
 }
 
-// Helper function for network request with timeout
+/*
+  Helper: timeoutFetch
+     Aborts a fetch if it exceeds 'timeout' ms
+*/
 async function timeoutFetch(request, timeout = 3000) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeout);
+
   try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), timeout);
     const response = await fetch(request, { signal: controller.signal });
     clearTimeout(timeoutId);
     return response;
   } catch (error) {
+    clearTimeout(timeoutId);
     throw error;
   }
 }
 
-// Fetch handler with optimized strategies
+/* 
+  3) FETCH EVENT
+     - Different caching strategies for API, Images, and Static Assets
+*/
 self.addEventListener('fetch', (event) => {
+  // If request is not GET, skip caching to prevent errors
+  if (event.request.method !== 'GET') {
+    return;
+  }
+
   const url = new URL(event.request.url);
 
-  // Handle API requests
+  // A) API requests
   if (url.pathname.startsWith('/api/')) {
     event.respondWith(
-      timeoutFetch(event.request)
-        .then((response) => {
-          if (response.status === 200) {
-            const responseClone = response.clone();
-            caches.open(DATA_CACHE_NAME).then((cache) => {
-              cache.put(event.request, responseClone);
-            });
+      (async () => {
+        try {
+          const networkResponse = await timeoutFetch(event.request);
+          if (networkResponse.status === 200) {
+            const clonedResponse = networkResponse.clone();
+            const cache = await caches.open(DATA_CACHE_NAME);
+            cache.put(event.request, clonedResponse);
           }
-          return response;
-        })
-        .catch(() => {
-          return caches.match(event.request).then(response => {
-            return response || new Response(JSON.stringify({ error: 'offline' }), {
-              headers: { 'Content-Type': 'application/json' }
-            });
-          });
-        })
+          return networkResponse;
+        } catch (error) {
+          const cachedResponse = await caches.match(event.request);
+          return (
+            cachedResponse ||
+            new Response(JSON.stringify({ error: 'offline' }), {
+              headers: { 'Content-Type': 'application/json' },
+            })
+          );
+        }
+      })()
     );
     return;
   }
 
-  // Handle image requests
+  // B) Image requests
   if (isImageRequest(event.request)) {
     event.respondWith(
-      caches.match(event.request).then((cachedResponse) => {
-        // Return cached response if available
+      (async () => {
+        const cachedResponse = await caches.match(event.request);
         if (cachedResponse) {
-          // Fetch and cache update in background
+          // Update in background
           event.waitUntil(
-            timeoutFetch(event.request).then(response => {
-              if (response.ok) {
-                caches.open(IMAGE_CACHE_NAME).then(cache => {
-                  cache.put(event.request, response);
-                });
+            (async () => {
+              try {
+                const response = await timeoutFetch(event.request);
+                if (response && response.ok) {
+                  const imgCache = await caches.open(IMAGE_CACHE_NAME);
+                  imgCache.put(event.request, response);
+                }
+              } catch (err) {
+                // silent fail
               }
-            })
+            })()
           );
           return cachedResponse;
         }
 
-        // If not cached, fetch and cache
-        return timeoutFetch(event.request).then(response => {
-          if (response.ok) {
-            const responseClone = response.clone();
+        // If not cached, fetch & store
+        try {
+          const networkResponse = await timeoutFetch(event.request);
+          if (networkResponse.ok) {
+            const responseClone = networkResponse.clone();
             event.waitUntil(
-              caches.open(IMAGE_CACHE_NAME).then(cache => {
-                cache.put(event.request, responseClone);
-              })
+              (async () => {
+                const imgCache = await caches.open(IMAGE_CACHE_NAME);
+                await imgCache.put(event.request, responseClone);
+              })()
             );
           }
-          return response;
-        });
-      })
+          return networkResponse;
+        } catch (error) {
+          return caches.match('/images/background-placeholder.webp');
+        }
+      })()
     );
     return;
   }
 
-  // Handle other static assets
+  // C) Static assets (HTML, CSS, JS, etc.)
   event.respondWith(
-    caches.match(event.request).then((cachedResponse) => {
+    (async () => {
+      const cachedResponse = await caches.match(event.request);
       if (cachedResponse) {
         return cachedResponse;
       }
-      return timeoutFetch(event.request).then(response => {
-        if (response.ok && (response.type === 'basic' || response.type === 'cors')) {
-          const responseClone = response.clone();
+
+      try {
+        const networkResponse = await timeoutFetch(event.request);
+        if (
+          networkResponse &&
+          networkResponse.ok &&
+          (networkResponse.type === 'basic' || networkResponse.type === 'cors')
+        ) {
+          const clonedResponse = networkResponse.clone();
           event.waitUntil(
-            caches.open(CACHE_NAME).then(cache => {
-              cache.put(event.request, responseClone);
-            })
+            (async () => {
+              const staticCache = await caches.open(CACHE_NAME);
+              await staticCache.put(event.request, clonedResponse);
+            })()
           );
         }
-        return response;
-      });
-    })
+        return networkResponse;
+      } catch (error) {
+        return caches.match('/');
+      }
+    })()
   );
 });
 
-// Handle background sync
+/*
+  4) BACKGROUND SYNC
+*/
 self.addEventListener('sync', (event) => {
   if (event.tag === 'sync-data') {
     event.waitUntil(
-      // Implement your sync logic here
+      // Your logic for queued data sync
       Promise.resolve()
     );
   }
 });
 
-// Handle push notifications
+/*
+  5) PUSH NOTIFICATIONS
+*/
 self.addEventListener('push', (event) => {
   if (event.data) {
     const data = event.data.json();
     event.waitUntil(
       self.registration.showNotification(data.title, {
         body: data.message,
-        icon: '/icons/icon-192x192.png'
+        icon: '/icons/icon-192x192.png',
       })
     );
   }

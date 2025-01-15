@@ -1,26 +1,19 @@
-// src/Dashboard.jsx
-
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import mockData from './data/mockData';
 import ProfileHeader from './components/ProfileHeader';
 import CategorySection from './components/CategorySection';
 import RadarChart from './components/RadarChart';
 import OffensiveSection from './components/OffensiveSection';
 import RadialTabs from './components/RadialTabs';
 import { computeCategoryAverages, computeOverallScore } from './utils/helpers';
-import HomeSection from './components/HomeSection';  // Add this import if not already there
+import HomeSection from './components/HomeSection';
 import { SyncManager } from './utils/sync';
 import { InstallPrompt } from './components/InstallPrompt';
 import RoadmapModal from './components/RoadmapModal';
 import FloatingActionButton from './components/FloatingActionButton';
-
-
 import './index.css';
-
-/* -------------------------------------
-   3) MAIN APP
--------------------------------------- */
+import { fetchAthletes } from './services/athleteService';
+import { LoadingState } from './components/LoadingState';
 
 function Dashboard() {
   const location = useLocation();
@@ -29,39 +22,52 @@ function Dashboard() {
   const [syncPending, setSyncPending] = useState(false);
   const [isRoadmapOpen, setRoadmapOpen] = useState(false);
 
-  // 3.1) Manage Selected Athlete
-  const [selectedAthleteId, setSelectedAthleteId] = useState(mockData[0].id);
+  // Athlete selection
+  const [selectedAthleteId, setSelectedAthleteId] = useState(null);
 
-  // 3.2) Automatically select athlete based on URL parameters
+  // Data fetching states
+  const [athletes, setAthletes] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  // Fetch athletes from Firestore
   useEffect(() => {
-    const searchParams = new URLSearchParams(location.search);
-    const athleteIdFromUrl = searchParams.get('id');
+    const getAthletes = async () => {
+      try {
+        const data = await fetchAthletes();
+        setAthletes(data);
+        setLoading(false);
 
-    if (athleteIdFromUrl) {
-        const athleteId = parseInt(athleteIdFromUrl, 10);
-        const athleteExists = mockData.some(a => a.id === athleteId);
-        if (athleteExists) {
-            setSelectedAthleteId(athleteId);
-        } else {
+        // URL parameter check for athlete ID
+        const searchParams = new URLSearchParams(location.search);
+        const athleteIdFromUrl = searchParams.get('id');
+
+        if (athleteIdFromUrl) {
+          const athleteExists = data.some(a => a.id === athleteIdFromUrl);
+          if (athleteExists) {
+            setSelectedAthleteId(athleteIdFromUrl);
+          } else {
+            console.warn(`[Dashboard] Athlete ID ${athleteIdFromUrl} not found, redirecting.`);
             navigate('/', { replace: true });
+          }
+        } else if (data.length > 0) {
+          // Default to the first athlete
+          setSelectedAthleteId(data[0].id);
         }
-    } else if (mockData.length > 0) {
-        // Default to athlete with id 7 if available
-        const defaultAthlete = mockData.find(a => a.id === 7);
-        if (defaultAthlete) {
-            setSelectedAthleteId(7);
-        } else {
-            // Fallback to the first athlete if id 7 is not found
-            setSelectedAthleteId(mockData[0].id);
-        }
-    }
-}, [location.search, navigate]);
+      } catch (err) {
+        console.error('[Dashboard] Error fetching athletes:', err);
+        setError('Failed to load athletes.');
+        setLoading(false);
+      }
+    };
+    getAthletes();
+  }, [location.search, navigate]);
 
+  // Current selected athlete
+  const selectedAthlete = athletes.find(a => a.id === selectedAthleteId);
 
-  // Find the selected athlete from mockData
-  const selectedAthlete = mockData.find(athlete => athlete.id === selectedAthleteId);
-  // 3.4) Group data into categories
-  const getCategoryData = (p) => ({
+  // Data grouping for categories
+  const getCategoryData = (athlete) => ({
     physical: [
       { key: 'speed_explosiveness', label: 'Speed & Explosiveness' },
       { key: 'endurance', label: 'Endurance' },
@@ -148,19 +154,19 @@ function Dashboard() {
     ],
   });
 
-  // 3.4) We'll keep track of the active tab, default to "home"
+  // Tab management
   const [activeTab, setActiveTab] = useState('home');
 
-  // 3.5) Precompute the main category averages for radial tab display
+  // Precompute main category averages for radial tabs
   const [averages, setAverages] = useState({});
   useEffect(() => {
     if (selectedAthlete) {
-      const newAvg = computeCategoryAverages(selectedAthlete);
-      setAverages(newAvg);
+      const newAverages = computeCategoryAverages(selectedAthlete);
+      setAverages(newAverages);
     }
   }, [selectedAthlete]);
 
-  // 3.6) Radar example for “Throw Comparison” inside Offensive
+  // Example Throw Comparison Radar
   const radarLabels = [
     'Backhand Power',
     'Forehand Power',
@@ -169,128 +175,135 @@ function Dashboard() {
     'Forehand Accuracy',
     'Specialty Accuracy',
   ];
-  const radarDataValues = [
-    selectedAthlete.skills.backhand_power,
-    selectedAthlete.skills.forehand_power,
-    selectedAthlete.skills.specialty_power,
-    selectedAthlete.skills.backhand_accuracy,
-    selectedAthlete.skills.forehand_accuracy,
-    selectedAthlete.skills.specialty_accuracy,
-  ];
+  const radarDataValues = selectedAthlete
+    ? [
+        selectedAthlete.skills.backhand_power,
+        selectedAthlete.skills.forehand_power,
+        selectedAthlete.skills.specialty_power,
+        selectedAthlete.skills.backhand_accuracy,
+        selectedAthlete.skills.forehand_accuracy,
+        selectedAthlete.skills.specialty_accuracy,
+      ]
+    : [];
 
+  // Online/Offline status
   useEffect(() => {
     const handleOnline = () => {
       setIsOnline(true);
+      // Attempt to sync pending data if any
       SyncManager.processSyncQueue();
     };
-    const handleOffline = () => setIsOnline(false);
+    const handleOffline = () => {
+      setIsOnline(false);
+    };
 
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
-
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
   }, []);
 
-  /* -------------------------------------
-     RENDER
-  -------------------------------------- */
   return (
-    
     <div className="min-h-screen bg-gray-900 text-gray-100 flex flex-col">
-            {!isOnline && (
+      {!isOnline && (
         <div className="bg-yellow-600 text-white px-4 py-2 text-center">
           You're offline. Some features may be limited.
         </div>
       )}
-      <InstallPrompt />
-      {/** 1) Profile Header at the top */}
-      <ProfileHeader
-        name={selectedAthlete.metadata.name}
-        email={selectedAthlete.metadata.email}
-        overallScore={
-          activeTab === 'home'
-            ? computeOverallScore(selectedAthlete)
-            : averages[activeTab] || 0
-        }
-        athletes={mockData}
-        selectedAthleteId={selectedAthleteId}
-        onSelectAthlete={(id) => setSelectedAthleteId(id)} // Pass a handler
-      />
 
-      {/** 3) The radial nav row (icons + radial) for Home, Physical, Offensive, Defensive, Mental */}
+      {/* Show custom InstallPrompt for PWA */}
+      <InstallPrompt />
+
+      {/** Profile Header (only if selectedAthlete is available) */}
+      {selectedAthlete && (
+        <ProfileHeader
+          name={selectedAthlete.metadata.name}
+          email={selectedAthlete.metadata.email}
+          overallScore={
+            activeTab === 'home'
+              ? computeOverallScore(selectedAthlete)
+              : averages[activeTab] || 0
+          }
+          athletes={athletes}
+          selectedAthleteId={selectedAthleteId}
+          onSelectAthlete={(id) => setSelectedAthleteId(id)}
+        />
+      )}
+
+      {/** Radial navigation row for main tabs */}
       <RadialTabs
         activeTab={activeTab}
         onChangeTab={setActiveTab}
         averages={averages}
       />
 
-      {/** 4) Scrollable content below the radial nav */}
+      {/** Main content container */}
       <div className="flex-1 overflow-auto px-4 pb-8 mt-4">
-        {/** HOME (Dashboard) */}
-        {activeTab === 'home' && (
-          <HomeSection player={selectedAthlete} />
+        {/** Loading indicator */}
+        {loading && <LoadingState />}
+
+        {/** Error message */}
+        {error && (
+          <div className="bg-red-600 text-white px-4 py-2 rounded">
+            {error}
+          </div>
         )}
 
-        {/** PHYSICAL */}
-        {activeTab === 'physical' && (
-          <CategorySection
-            title="Physical Attributes"
-            skills={getCategoryData(selectedAthlete).physical}
-            player={selectedAthlete.skills}
-          />
-        )}
-
-        {/** OFFENSIVE */}
-        {activeTab === 'offensive' && (
+        {/** Main content if data is loaded */}
+        {!loading && !error && selectedAthlete && (
           <>
-            <OffensiveSection
-              offensiveData={getCategoryData(selectedAthlete).offensive}
-              player={selectedAthlete.skills}
+            {activeTab === 'home' && <HomeSection player={selectedAthlete} />}
+            
+            {activeTab === 'physical' && (
+              <CategorySection
+                title="Physical Attributes"
+                skills={getCategoryData(selectedAthlete).physical}
+                player={selectedAthlete.skills}
+              />
+            )}
+
+            {activeTab === 'offensive' && (
+              <>
+                <OffensiveSection
+                  offensiveData={getCategoryData(selectedAthlete).offensive}
+                  player={selectedAthlete.skills}
+                />
+                <div className="mt-6">
+                  <h2 className="text-xl font-semibold mb-2 text-gray-100">
+                    Throw Comparison
+                  </h2>
+                  <RadarChart labels={radarLabels} dataValues={radarDataValues} />
+                </div>
+              </>
+            )}
+
+            {activeTab === 'defensive' && (
+              <CategorySection
+                title="Defensive Skills"
+                skills={getCategoryData(selectedAthlete).defensive}
+                player={selectedAthlete.skills}
+              />
+            )}
+
+            {activeTab === 'mental' && (
+              <CategorySection
+                title="Mental & Recovery"
+                skills={getCategoryData(selectedAthlete).mental}
+                player={selectedAthlete.skills}
+              />
+            )}
+
+            {/* Roadmap Modal */}
+            <RoadmapModal
+              isOpen={isRoadmapOpen}
+              onClose={() => setRoadmapOpen(false)}
+              player={selectedAthlete}
             />
-            {/* Example: A Throw Comparison Radar Chart */}
-            <div className="mt-6">
-              <h2 className="text-xl font-semibold mb-2 text-gray-100">
-                Throw Comparison
-              </h2>
-              <RadarChart labels={radarLabels} dataValues={radarDataValues} />
-            </div>
+            <FloatingActionButton onClick={() => setRoadmapOpen(true)} />
           </>
         )}
-
-        {/** DEFENSIVE */}
-        {activeTab === 'defensive' && (
-          <CategorySection
-            title="Defensive Skills"
-            skills={getCategoryData(selectedAthlete).defensive}
-            player={selectedAthlete.skills}
-          />
-        )}
-
-        {/** MENTAL */}
-        {activeTab === 'mental' && (
-          <CategorySection
-            title="Mental & Recovery"
-            skills={getCategoryData(selectedAthlete).mental}
-            player={selectedAthlete.skills}
-          />
-        )}
-
-        {/* Roadmap Modal */}
-        <RoadmapModal 
-        isOpen={isRoadmapOpen}
-        onClose={() => setRoadmapOpen(false)}
-        player={selectedAthlete}
-      />
-          <FloatingActionButton onClick={() => setRoadmapOpen(true)} />
-    
-    <RoadmapModal 
-      isOpen={isRoadmapOpen}
-      onClose={() => setRoadmapOpen(false)}
-      player={selectedAthlete}
-    />
       </div>
     </div>
   );

@@ -1,14 +1,15 @@
 {
+  "id": "/?source=manifest",
   "name": "Ultify | Visualize Your Game",
   "short_name": "Ultify",
   "description": "Visualize and track your Ultimate Frisbee abilities",
-  "start_url": "/",
+  "start_url": "/?source=manifest",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#1F2937",
   "theme_color": "#10B981",
   "orientation": "portrait-primary",
   "categories": ["sports", "fitness", "training"],
-  "screenshots": [],
   "prefer_related_applications": false,
   "icons": [
     {
@@ -52,6 +53,19 @@
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/images/screenshot-mobile.png",
+      "sizes": "540x720", 
+      "type": "image/png"
+    },
+    {
+      "src": "/images/screenshot-desktop-wide.png",
+      "sizes": "1280x720",
+      "type": "image/png",
+      "form_factor": "wide"
     }
   ]
 }

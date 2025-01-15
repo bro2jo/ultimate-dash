@@ -1,6 +1,6 @@
 Project: performance-app
 Version: 0.1.0
-Generated: 2025-01-14T23:05:58.370Z
+Generated: 2025-01-15T02:41:37.480Z
 ================================================================================
 
 File: concat-files.js
@@ -121,6 +121,7 @@ File: package.json
     "chart.js": "^4.4.7",
     "cra-template": "1.2.0",
     "firebase": "^11.1.0",
+    "firebase-admin": "^13.0.2",
     "framer-motion": "^11.16.4",
     "lucide-react": "^0.469.0",
     "react": "^19.0.0",
@@ -179,11 +180,15 @@ module.exports = {
 File: public\service-worker.js
 ================================================================================
 
-const CACHE_NAME = 'ultify-cache-v2'; // Increment version for updates
+/* -----------------------------------------
+   service-worker.js (Refactored & Enhanced)
+-------------------------------------------- */
+
+const CACHE_NAME = 'ultify-cache-v2';      // Increment for static assets
 const IMAGE_CACHE_NAME = 'ultify-images-v1';
 const DATA_CACHE_NAME = 'ultify-data-v1';
 
-// Static assets to cache immediately
+// Static assets to be cached immediately
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -193,7 +198,7 @@ const STATIC_ASSETS = [
   '/favicon.svg',
 ];
 
-// Image assets to cache on first use
+// Images that can be cached on first use
 const IMAGE_ASSETS = [
   '/images/background-sm.webp',
   '/images/background-md.webp',
@@ -210,177 +215,228 @@ const IMAGE_ASSETS = [
   '/icons/icon-512x512.png',
 ];
 
-// Install Service Worker
+/* 
+  1) INSTALL
+     - Cache essential assets
+     - Preload small placeholder image
+*/
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    Promise.all([
-      // Cache static assets immediately
-      caches.open(CACHE_NAME).then((cache) => {
-        return cache.addAll(STATIC_ASSETS);
-      }),
-      // Pre-cache the tiny placeholder image
-      caches.open(IMAGE_CACHE_NAME).then((cache) => {
-        return cache.add('/images/background-placeholder.webp');
-      })
-    ])
+    (async () => {
+      const staticCache = await caches.open(CACHE_NAME);
+      await staticCache.addAll(STATIC_ASSETS);
+
+      // Pre-cache placeholder image
+      const imgCache = await caches.open(IMAGE_CACHE_NAME);
+      await imgCache.add('/images/background-placeholder.webp');
+    })()
   );
+
+  // Take control immediately
   self.skipWaiting();
 });
 
-// Activate and Clean up old caches
+/* 
+  2) ACTIVATE
+     - Clean up old caches
+     - Notify clients of updates
+*/
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((cacheNames) => {
-      return Promise.all(
-        cacheNames
-          .filter((cacheName) => {
-            // Remove any cache that doesn't match our current versions
-            return (
-              cacheName !== CACHE_NAME &&
-              cacheName !== DATA_CACHE_NAME &&
-              cacheName !== IMAGE_CACHE_NAME
-            );
-          })
-          .map((cacheName) => {
-            return caches.delete(cacheName);
-          })
-      );
-    }).then(() => {
-      // Notify clients about the update
-      self.clients.matchAll().then(clients => {
-        clients.forEach(client => client.postMessage({ type: 'CACHE_UPDATED' }));
-      });
-    })
+    (async () => {
+      const cacheNames = await caches.keys();
+      const deletionPromises = cacheNames
+        .filter((cacheName) => {
+          return (
+            cacheName !== CACHE_NAME &&
+            cacheName !== DATA_CACHE_NAME &&
+            cacheName !== IMAGE_CACHE_NAME
+          );
+        })
+        .map((cacheName) => caches.delete(cacheName));
+
+      await Promise.all(deletionPromises);
+
+      // Notify all clients
+      const clientsList = await self.clients.matchAll();
+      for (const client of clientsList) {
+        client.postMessage({ type: 'CACHE_UPDATED' });
+      }
+    })()
   );
+
   self.clients.claim();
 });
 
-// Helper function to check if request is for an image
+/* 
+  Helper: isImageRequest
+     Checks if the request is for an image
+*/
 function isImageRequest(request) {
-  return request.destination === 'image' || 
-         IMAGE_ASSETS.some(asset => request.url.includes(asset));
+  return (
+    request.destination === 'image' ||
+    IMAGE_ASSETS.some((asset) => request.url.includes(asset))
+  );
 }
 
-// Helper function for network request with timeout
+/*
+  Helper: timeoutFetch
+     Aborts a fetch if it exceeds 'timeout' ms
+*/
 async function timeoutFetch(request, timeout = 3000) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeout);
+
   try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), timeout);
     const response = await fetch(request, { signal: controller.signal });
     clearTimeout(timeoutId);
     return response;
   } catch (error) {
+    clearTimeout(timeoutId);
     throw error;
   }
 }
 
-// Fetch handler with optimized strategies
+/* 
+  3) FETCH EVENT
+     - Different caching strategies for API, Images, and Static Assets
+*/
 self.addEventListener('fetch', (event) => {
+  // If request is not GET, skip caching to prevent errors
+  if (event.request.method !== 'GET') {
+    return;
+  }
+
   const url = new URL(event.request.url);
 
-  // Handle API requests
+  // A) API requests
   if (url.pathname.startsWith('/api/')) {
     event.respondWith(
-      timeoutFetch(event.request)
-        .then((response) => {
-          if (response.status === 200) {
-            const responseClone = response.clone();
-            caches.open(DATA_CACHE_NAME).then((cache) => {
-              cache.put(event.request, responseClone);
-            });
+      (async () => {
+        try {
+          const networkResponse = await timeoutFetch(event.request);
+          if (networkResponse.status === 200) {
+            const clonedResponse = networkResponse.clone();
+            const cache = await caches.open(DATA_CACHE_NAME);
+            cache.put(event.request, clonedResponse);
           }
-          return response;
-        })
-        .catch(() => {
-          return caches.match(event.request).then(response => {
-            return response || new Response(JSON.stringify({ error: 'offline' }), {
-              headers: { 'Content-Type': 'application/json' }
-            });
-          });
-        })
+          return networkResponse;
+        } catch (error) {
+          const cachedResponse = await caches.match(event.request);
+          return (
+            cachedResponse ||
+            new Response(JSON.stringify({ error: 'offline' }), {
+              headers: { 'Content-Type': 'application/json' },
+            })
+          );
+        }
+      })()
     );
     return;
   }
 
-  // Handle image requests
+  // B) Image requests
   if (isImageRequest(event.request)) {
     event.respondWith(
-      caches.match(event.request).then((cachedResponse) => {
-        // Return cached response if available
+      (async () => {
+        const cachedResponse = await caches.match(event.request);
         if (cachedResponse) {
-          // Fetch and cache update in background
+          // Update in background
           event.waitUntil(
-            timeoutFetch(event.request).then(response => {
-              if (response.ok) {
-                caches.open(IMAGE_CACHE_NAME).then(cache => {
-                  cache.put(event.request, response);
-                });
+            (async () => {
+              try {
+                const response = await timeoutFetch(event.request);
+                if (response && response.ok) {
+                  const imgCache = await caches.open(IMAGE_CACHE_NAME);
+                  imgCache.put(event.request, response);
+                }
+              } catch (err) {
+                // silent fail
               }
-            })
+            })()
           );
           return cachedResponse;
         }
 
-        // If not cached, fetch and cache
-        return timeoutFetch(event.request).then(response => {
-          if (response.ok) {
-            const responseClone = response.clone();
+        // If not cached, fetch & store
+        try {
+          const networkResponse = await timeoutFetch(event.request);
+          if (networkResponse.ok) {
+            const responseClone = networkResponse.clone();
             event.waitUntil(
-              caches.open(IMAGE_CACHE_NAME).then(cache => {
-                cache.put(event.request, responseClone);
-              })
+              (async () => {
+                const imgCache = await caches.open(IMAGE_CACHE_NAME);
+                await imgCache.put(event.request, responseClone);
+              })()
             );
           }
-          return response;
-        });
-      })
+          return networkResponse;
+        } catch (error) {
+          return caches.match('/images/background-placeholder.webp');
+        }
+      })()
     );
     return;
   }
 
-  // Handle other static assets
+  // C) Static assets (HTML, CSS, JS, etc.)
   event.respondWith(
-    caches.match(event.request).then((cachedResponse) => {
+    (async () => {
+      const cachedResponse = await caches.match(event.request);
       if (cachedResponse) {
         return cachedResponse;
       }
-      return timeoutFetch(event.request).then(response => {
-        if (response.ok && (response.type === 'basic' || response.type === 'cors')) {
-          const responseClone = response.clone();
+
+      try {
+        const networkResponse = await timeoutFetch(event.request);
+        if (
+          networkResponse &&
+          networkResponse.ok &&
+          (networkResponse.type === 'basic' || networkResponse.type === 'cors')
+        ) {
+          const clonedResponse = networkResponse.clone();
           event.waitUntil(
-            caches.open(CACHE_NAME).then(cache => {
-              cache.put(event.request, responseClone);
-            })
+            (async () => {
+              const staticCache = await caches.open(CACHE_NAME);
+              await staticCache.put(event.request, clonedResponse);
+            })()
           );
         }
-        return response;
-      });
-    })
+        return networkResponse;
+      } catch (error) {
+        return caches.match('/');
+      }
+    })()
   );
 });
 
-// Handle background sync
+/*
+  4) BACKGROUND SYNC
+*/
 self.addEventListener('sync', (event) => {
   if (event.tag === 'sync-data') {
     event.waitUntil(
-      // Implement your sync logic here
+      // Your logic for queued data sync
       Promise.resolve()
     );
   }
 });
 
-// Handle push notifications
+/*
+  5) PUSH NOTIFICATIONS
+*/
 self.addEventListener('push', (event) => {
   if (event.data) {
     const data = event.data.json();
     event.waitUntil(
       self.registration.showNotification(data.title, {
         body: data.message,
-        icon: '/icons/icon-192x192.png'
+        icon: '/icons/icon-192x192.png',
       })
     );
   }
 });
+
 
 File: README.md
 ================================================================================
@@ -455,6 +511,74 @@ This section has moved here: [https://facebook.github.io/create-react-app/docs/d
 ### `npm run build` fails to minify
 
 This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+
+
+File: scripts\migrateMockData.js
+================================================================================
+
+// scripts/migrateMockData.js
+
+console.log("Migration script started.");
+
+const admin = require('firebase-admin');
+const fs = require('fs');
+const path = require('path');
+
+// Path to your service account key
+const serviceAccountPath = path.join(__dirname, 'serviceAccountKey.json');
+
+(async () => {
+  try {
+    // Check if service account key exists
+    if (!fs.existsSync(serviceAccountPath)) {
+      throw new Error(`Service account key not found at path: ${serviceAccountPath}`);
+    }
+
+    // Initialize Firebase Admin SDK
+    const serviceAccount = require(serviceAccountPath);
+    admin.initializeApp({
+      credential: admin.credential.cert(serviceAccount),
+    });
+    console.log("Firebase Admin initialized.");
+
+    const db = admin.firestore();
+
+    // Import mockData
+    const mockData = require('../src/data/mockData');
+    if (!Array.isArray(mockData)) {
+      throw new Error('mockData is not an array.');
+    }
+    console.log(`Loaded ${mockData.length} athletes from mockData.js`);
+
+    if (mockData.length === 0) {
+      console.log("No athletes to migrate.");
+      process.exit(0);
+    }
+
+    for (const [index, athlete] of mockData.entries()) {
+      console.log(`Migrating athlete ${index + 1}/${mockData.length}: ${athlete.metadata.name}`);
+      
+      // Reference to the athletes collection with a specified document ID (optional)
+      // If you want to use a specific ID, replace `.doc()` with `.doc(athlete.id.toString())`
+      const athleteRef = db.collection('athletes').doc(); // Auto-generated ID
+
+      // Set athlete data
+      await athleteRef.set({
+        metadata: athlete.metadata,
+        growth_targets: athlete.growth_targets,
+        skills: athlete.skills,
+      });
+
+      console.log(`Migrated athlete: ${athlete.metadata.name} with ID: ${athleteRef.id}`);
+    }
+
+    console.log('Data migration completed successfully.');
+    process.exit(0);
+  } catch (error) {
+    console.error('Error migrating data:', error);
+    process.exit(1);
+  }
+})();
 
 
 File: scripts\optimize-images.js
@@ -655,47 +779,25 @@ const ProtectedRoute = lazy(() => import('./components/auth/ProtectedRoute'));
 function App() {
   return (
     <AuthProvider>
-      <Routes>
-        <Route 
-          path="/login" 
-          element={
-            <Suspense fallback={
-              <div className="min-h-screen bg-gray-900 flex items-center justify-center">
-                <h1 className="text-xl text-gray-200">Welcome back</h1>
-              </div>
-            }>
-              <LoginPage />
-            </Suspense>
-          } 
-        />
-        <Route
-          path="/*"
-          element={
-            <Suspense fallback={<LoadingState />}>
+      {/* Single Suspense boundary at the root */}
+      <Suspense fallback={<LoadingState />}>
+        <Routes>
+          <Route path="/login" element={<LoginPage />} />
+          <Route
+            path="/*"
+            element={
               <ProtectedRoute>
                 <Dashboard />
               </ProtectedRoute>
-            </Suspense>
-          }
-        />
-      </Routes>
+            }
+          />
+        </Routes>
+      </Suspense>
     </AuthProvider>
   );
 }
 
 export default App;
-
-File: src\App.test.js
-================================================================================
-
-import { render, screen } from '@testing-library/react';
-import App from './App';
-
-test('renders learn react link', () => {
-  render(<App />);
-  const linkElement = screen.getByText(/learn react/i);
-  expect(linkElement).toBeInTheDocument();
-});
 
 
 File: src\components\AthleteDropdown.jsx
@@ -782,6 +884,31 @@ const AthleteDropdown = ({ athletes, selectedAthleteId, onSelectAthlete }) => {
 };
 
 export default AthleteDropdown;
+
+
+File: src\components\AthleteList.jsx
+================================================================================
+
+// src/components/AthleteList.jsx
+
+import React from 'react';
+
+const AthleteList = ({ athletes }) => {
+  return (
+    <div>
+      <h2>Athletes</h2>
+      <ul>
+        {athletes.map(athlete => (
+          <li key={athlete.id}>
+            <strong>{athlete.metadata.name}</strong> - {athlete.metadata.email}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+};
+
+export default AthleteList;
 
 
 File: src\components\auth\LoginPage.jsx
@@ -1099,16 +1226,26 @@ File: src\components\auth\ProtectedRoute.jsx
 // src/components/auth/ProtectedRoute.jsx
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import { LoadingState } from '../LoadingState'; // adjust import path if needed
 
 export default function ProtectedRoute({ children }) {
-  const { user } = useAuth();
-  
+  const { user, loading } = useAuth(); 
+  // ^ Make sure your AuthContext provides both `user` and `loading` (or `authLoading`).
+
+  // 1) If Auth is still loading, show a spinner (or any fallback).
+  if (loading) {
+    return <LoadingState />;
+  }
+
+  // 2) If no user, redirect to login page.
   if (!user) {
     return <Navigate to="/login" replace />;
   }
 
+  // 3) Otherwise, render the protected component(s).
   return children;
 }
+
 
 File: src\components\CategorySection.jsx
 ================================================================================
@@ -1136,6 +1273,41 @@ const CategorySection = ({ title, skills, player }) => {
 };
 
 export default CategorySection;
+
+
+File: src\components\FirestoreTest.jsx
+================================================================================
+
+// src/components/FirestoreTest.jsx
+
+import React, { useEffect } from 'react';
+import { db } from '../config/firebase';
+import { collection, getDocs } from 'firebase/firestore';
+
+const FirestoreTest = () => {
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const athletesCol = collection(db, 'athletes');
+        const athletesSnapshot = await getDocs(athletesCol);
+        const athletesList = athletesSnapshot.docs.map(doc => doc.data());
+        console.log('Athletes:', athletesList);
+      } catch (error) {
+        console.error('Error fetching athletes:', error);
+      }
+    };
+
+    fetchData();
+  }, []);
+
+  return (
+    <div>
+      <h2>Firestore Test</h2>
+    </div>
+  );
+};
+
+export default FirestoreTest;
 
 
 File: src\components\FloatingActionButton.jsx
@@ -1324,80 +1496,103 @@ File: src\components\InstallPrompt.jsx
 ================================================================================
 
 // src/components/InstallPrompt.jsx
+
 import React, { useState, useEffect } from 'react';
 
 export function InstallPrompt() {
   const [installPrompt, setInstallPrompt] = useState(null);
-  const [debugInfo, setDebugInfo] = useState({ 
-    isStandalone: false, 
+  const [debugInfo, setDebugInfo] = useState({
+    isStandalone: false,
     hasShownPrompt: false,
-    promptEventReceived: false 
+    promptEventReceived: false,
+    isSecureContext: false,
+    isSupportedBrowser: false,
+    debugMessages: []
   });
 
   useEffect(() => {
-    console.log('[InstallPrompt] Component mounted');
+    const newDebugMessages = [];
+    
+    // Check if served over HTTPS or localhost
+    const isSecure = window.isSecureContext || window.location.hostname === 'localhost';
+    newDebugMessages.push(`isSecureContext: ${isSecure}`);
+
+    // Basic check for browser support (Chrome, Edge, etc. - iOS Safari won't fire BIP)
+    const isSupported = 'BeforeInstallPromptEvent' in window || 'onbeforeinstallprompt' in window;
+    newDebugMessages.push(`isSupportedBrowser: ${isSupported}`);
 
     // Check if running in standalone mode
-    const isStandalone = window.matchMedia('(display-mode: standalone)').matches 
-      || window.navigator.standalone 
-      || document.referrer.includes('android-app://');
-      
-    console.log('[InstallPrompt] Is standalone:', isStandalone);
+    const isStandalone =
+      window.matchMedia('(display-mode: standalone)').matches ||
+      window.navigator.standalone ||
+      document.referrer.includes('android-app://');
+    newDebugMessages.push(`isStandalone: ${isStandalone}`);
 
-    const hasShownPrompt = localStorage.getItem('installPromptShown');
-    console.log('[InstallPrompt] Previously shown:', hasShownPrompt);
+    let hasShownPrompt = false;
+    try {
+      hasShownPrompt = !!localStorage.getItem('installPromptShown');
+      newDebugMessages.push(`localStorage installPromptShown: ${hasShownPrompt}`);
+    } catch (err) {
+      newDebugMessages.push(`Error accessing localStorage: ${err.message}`);
+    }
 
-    setDebugInfo(prev => ({
+    setDebugInfo((prev) => ({
       ...prev,
-      isStandalone,
-      hasShownPrompt: !!hasShownPrompt
+      isSecureContext: isSecure,
+      isSupportedBrowser: isSupported,
+      isStandalone: isStandalone,
+      hasShownPrompt: hasShownPrompt,
+      debugMessages: [...prev.debugMessages, ...newDebugMessages]
     }));
 
-    // Handle the beforeinstallprompt event
     const handleBeforeInstallPrompt = (e) => {
-      console.log('[InstallPrompt] beforeinstallprompt event fired', e);
+      console.log('[InstallPrompt] beforeinstallprompt fired');
       e.preventDefault();
       setInstallPrompt(e);
-      setDebugInfo(prev => ({ ...prev, promptEventReceived: true }));
+
+      setDebugInfo((prev) => ({
+        ...prev,
+        promptEventReceived: true,
+        debugMessages: [...prev.debugMessages, 'BIP event captured']
+      }));
     };
 
-    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-
-    // Listen for appinstalled event
-    const handleAppInstalled = (e) => {
-      console.log('[InstallPrompt] App was installed', e);
-      localStorage.setItem('installPromptShown', 'true');
+    const handleAppInstalled = () => {
+      console.log('[InstallPrompt] App installed');
+      // Mark as shown so we don’t pester the user again
+      try {
+        localStorage.setItem('installPromptShown', 'true');
+      } catch (err) {
+        console.warn('[InstallPrompt] Could not save install state:', err);
+      }
       setInstallPrompt(null);
     };
 
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
     window.addEventListener('appinstalled', handleAppInstalled);
-    
+
     return () => {
       window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
       window.removeEventListener('appinstalled', handleAppInstalled);
     };
   }, []);
 
-  // Log state changes
+  // Additional debug logging whenever debugInfo changes
   useEffect(() => {
-    console.log('[InstallPrompt] State updated:', {
-      hasPrompt: !!installPrompt,
-      debugInfo
-    });
-  }, [installPrompt, debugInfo]);
+    console.log('[InstallPrompt] debugInfo updated:', debugInfo);
+  }, [debugInfo]);
 
   const handleInstall = async () => {
     if (!installPrompt) {
       console.log('[InstallPrompt] No install prompt available');
       return;
     }
-
     try {
-      console.log('[InstallPrompt] Triggering install prompt');
       installPrompt.prompt();
-      const result = await installPrompt.userChoice;
-      console.log('[InstallPrompt] Install prompt result:', result);
-      if (result.outcome === 'accepted') {
+      const choiceResult = await installPrompt.userChoice;
+      console.log('[InstallPrompt] userChoice outcome:', choiceResult.outcome);
+
+      if (choiceResult.outcome === 'accepted') {
         console.log('[InstallPrompt] User accepted the install prompt');
       } else {
         console.log('[InstallPrompt] User dismissed the install prompt');
@@ -1405,39 +1600,43 @@ export function InstallPrompt() {
       setInstallPrompt(null);
       localStorage.setItem('installPromptShown', 'true');
     } catch (error) {
-      console.error('[InstallPrompt] Error installing app:', error);
+      console.error('[InstallPrompt] Error during install prompt:', error);
     }
   };
 
   const handleDismiss = () => {
-    console.log('[InstallPrompt] Prompt dismissed');
+    console.log('[InstallPrompt] Prompt dismissed by user');
     setInstallPrompt(null);
-    localStorage.setItem('installPromptShown', 'true');
+    try {
+      localStorage.setItem('installPromptShown', 'true');
+    } catch (err) {
+      console.warn('[InstallPrompt] Could not save dismiss state:', err);
+    }
   };
 
-  // Early return conditions
+  // If app is already installed, do not show
   if (debugInfo.isStandalone) {
-    console.log('[InstallPrompt] App is installed, not showing prompt');
     return null;
   }
 
+  // If user has previously dismissed or accepted
   if (debugInfo.hasShownPrompt) {
-    console.log('[InstallPrompt] Install prompt has already been shown');
     return null;
   }
 
+  // If no prompt event captured
   if (!installPrompt) {
-    console.log('[InstallPrompt] No prompt available, not showing UI');
     return null;
   }
 
+  // Render your custom prompt UI
   return (
-    <div className="fixed bottom-4 left-4 right-4 md:left-auto md:right-4 md:w-96 bg-gray-800 p-4 rounded-lg shadow-lg z-50 border border-gray-700">
+    <div className="fixed bottom-4 left-4 right-4 md:right-4 md:w-96 bg-gray-800 p-4 rounded-lg shadow-lg z-50 border border-gray-700">
       <div className="flex flex-col space-y-3">
         <div>
-          <h3 className="text-gray-100 font-medium">Install Performance Tracker</h3>
+          <h3 className="text-gray-100 font-medium">Install Ultify</h3>
           <p className="text-gray-400 text-sm mt-1">
-            Install our app for the best experience and offline access
+            Get the best experience and offline functionality by installing the app.
           </p>
         </div>
 
@@ -1464,31 +1663,23 @@ export function InstallPrompt() {
 File: src\components\LoadingState.jsx
 ================================================================================
 
-// src/components/LoadingState.jsx
-export function LoadingState() {
+export function LoadingState({ size = 'h-16 w-16', color = 'emerald-500', text = 'Loading...' }) {
   return (
-    <div className="min-h-screen w-full">
-      {/* Background placeholder */}
-      <div 
-        className="absolute inset-0 bg-gradient-to-b from-gray-800 to-gray-900 animate-pulse"
-        style={{
-          backgroundSize: 'cover',
-          backgroundPosition: 'center',
-        }}
-      />
-      
-      {/* Loading spinner overlay */}
-      <div className="relative z-10 flex items-center justify-center min-h-screen">
-        <div className="flex flex-col items-center gap-4">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-emerald-500" />
-          <div className="text-gray-300 text-sm animate-pulse">
-            Loading...
-          </div>
-        </div>
+    <div className="fixed inset-0 flex items-center justify-center bg-gray-900 bg-opacity-75 z-50">
+      <div className="flex flex-col items-center gap-4">
+        {/* Loading Spinner */}
+        <div
+          className={`animate-spin rounded-full ${size} border-t-4 border-b-4 border-${color}`}
+          role="status"
+          aria-label="Loading"
+        />
+        {/* Loading Text */}
+        <div className="text-gray-300 text-lg">{text}</div>
       </div>
     </div>
   );
 }
+
 
 File: src\components\MiniRadial.jsx
 ================================================================================
@@ -1610,15 +1801,40 @@ const OptimizedBackground = () => {
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
-    // Preload the next larger image size after component mounts
-    const preloadLargerImage = new Image();
-    preloadLargerImage.src = '/images/background-lg.webp';
+    // Check if we already have a preload link for any of our background images
+    const existingPreload = document.querySelector('link[rel="preload"][href*="background"]');
+    
+    // Only add new preload if we don't already have one
+    if (!existingPreload) {
+      const isMobile = window.innerWidth < 768;
+
+      const link = document.createElement('link');
+      link.rel = 'preload';
+      link.as = 'image';
+      link.type = 'image/webp';
+
+      if (isMobile) {
+        link.href = '/images/background-mobileSm.webp';
+        link.media = '(max-width: 767px)';
+      } else {
+        link.href = '/images/background-sm.webp';
+        link.media = '(min-width: 768px)';
+      }
+
+      document.head.appendChild(link);
+
+      return () => {
+        if (link.parentNode) {
+          link.parentNode.removeChild(link);
+        }
+      };
+    }
   }, []);
 
   return (
     <>
-      {/* Placeholder while image loads */}
-      <div 
+      {/* Placeholder overlay while the main image loads */}
+      <div
         className={`absolute inset-0 bg-gradient-to-b from-gray-800 to-gray-900 transition-opacity duration-500 ${
           loaded ? 'opacity-0' : 'opacity-100'
         }`}
@@ -1691,29 +1907,12 @@ const OptimizedBackground = () => {
           }}
         />
       </picture>
-
-      {/* Preload tags for critical images */}
-      <link
-        rel="preload"
-        as="image"
-        href="/images/background-sm.webp"
-        type="image/webp"
-        media="(max-width: 767px)"
-        fetchpriority="high"
-      />
-      <link
-        rel="preload"
-        as="image"
-        href="/images/background-md.webp"
-        type="image/webp"
-        media="(min-width: 768px)"
-        fetchpriority="high"
-      />
     </>
   );
 };
 
 export default OptimizedBackground;
+
 
 File: src\components\OverallScoreRing.jsx
 ================================================================================
@@ -1779,7 +1978,6 @@ import { ChevronDown } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import OverallScoreRing from './OverallScoreRing';
-import backgroundImage from '../assets/background.jpg';
 import OptimizedBackground from './OptimizedBackground';
 
 const ProfileHeader = ({ 
@@ -2868,9 +3066,13 @@ File: src\config\firebase.js
 ================================================================================
 
 // src/config/firebase.js
+
 import { initializeApp } from "firebase/app";
 import { getAnalytics } from "firebase/analytics";
+import { getAuth } from "firebase/auth";
+import { getFirestore } from "firebase/firestore";
 
+// Your Firebase configuration object
 const firebaseConfig = {
   apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
   authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN,
@@ -2881,21 +3083,45 @@ const firebaseConfig = {
   measurementId: process.env.REACT_APP_FIREBASE_MEASUREMENT_ID
 };
 
+// Initialize Firebase App, Auth, Firestore, and Analytics
 let app = null;
 let analytics = null;
+let auth = null;
+let db = null;
 
+/**
+ * Initializes Firebase services.
+ * Ensures that Firebase is initialized only once.
+ * 
+ * @returns {FirebaseApp} The initialized Firebase app instance.
+ */
 export const initializeFirebase = () => {
   if (!app) {
+    // Initialize Firebase App
     app = initializeApp(firebaseConfig);
-    // Defer analytics initialization
+    
+    // Initialize Firebase Authentication
+    auth = getAuth(app);
+    
+    // Initialize Firestore
+    db = getFirestore(app);
+    
+    // Defer Analytics initialization by 2 seconds
     setTimeout(() => {
       analytics = getAnalytics(app);
     }, 2000);
+    
+    console.log("Firebase initialized successfully.");
   }
   return app;
 };
 
-export { app };
+// Immediately initialize Firebase when this module is imported
+initializeFirebase();
+
+// Export Firebase services for use in other parts of your application
+export { app, auth, db };
+
 
 File: src\contexts\AuthContext.js
 ================================================================================
@@ -3004,29 +3230,22 @@ export function AuthProvider({ children }) {
 File: src\Dashboard.jsx
 ================================================================================
 
-// src/Dashboard.jsx
-
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import mockData from './data/mockData';
 import ProfileHeader from './components/ProfileHeader';
 import CategorySection from './components/CategorySection';
 import RadarChart from './components/RadarChart';
 import OffensiveSection from './components/OffensiveSection';
 import RadialTabs from './components/RadialTabs';
 import { computeCategoryAverages, computeOverallScore } from './utils/helpers';
-import HomeSection from './components/HomeSection';  // Add this import if not already there
+import HomeSection from './components/HomeSection';
 import { SyncManager } from './utils/sync';
 import { InstallPrompt } from './components/InstallPrompt';
 import RoadmapModal from './components/RoadmapModal';
 import FloatingActionButton from './components/FloatingActionButton';
-
-
 import './index.css';
-
-/* -------------------------------------
-   3) MAIN APP
--------------------------------------- */
+import { fetchAthletes } from './services/athleteService';
+import { LoadingState } from './components/LoadingState';
 
 function Dashboard() {
   const location = useLocation();
@@ -3035,39 +3254,52 @@ function Dashboard() {
   const [syncPending, setSyncPending] = useState(false);
   const [isRoadmapOpen, setRoadmapOpen] = useState(false);
 
-  // 3.1) Manage Selected Athlete
-  const [selectedAthleteId, setSelectedAthleteId] = useState(mockData[0].id);
+  // Athlete selection
+  const [selectedAthleteId, setSelectedAthleteId] = useState(null);
 
-  // 3.2) Automatically select athlete based on URL parameters
+  // Data fetching states
+  const [athletes, setAthletes] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  // Fetch athletes from Firestore
   useEffect(() => {
-    const searchParams = new URLSearchParams(location.search);
-    const athleteIdFromUrl = searchParams.get('id');
+    const getAthletes = async () => {
+      try {
+        const data = await fetchAthletes();
+        setAthletes(data);
+        setLoading(false);
 
-    if (athleteIdFromUrl) {
-        const athleteId = parseInt(athleteIdFromUrl, 10);
-        const athleteExists = mockData.some(a => a.id === athleteId);
-        if (athleteExists) {
-            setSelectedAthleteId(athleteId);
-        } else {
+        // URL parameter check for athlete ID
+        const searchParams = new URLSearchParams(location.search);
+        const athleteIdFromUrl = searchParams.get('id');
+
+        if (athleteIdFromUrl) {
+          const athleteExists = data.some(a => a.id === athleteIdFromUrl);
+          if (athleteExists) {
+            setSelectedAthleteId(athleteIdFromUrl);
+          } else {
+            console.warn(`[Dashboard] Athlete ID ${athleteIdFromUrl} not found, redirecting.`);
             navigate('/', { replace: true });
+          }
+        } else if (data.length > 0) {
+          // Default to the first athlete
+          setSelectedAthleteId(data[0].id);
         }
-    } else if (mockData.length > 0) {
-        // Default to athlete with id 7 if available
-        const defaultAthlete = mockData.find(a => a.id === 7);
-        if (defaultAthlete) {
-            setSelectedAthleteId(7);
-        } else {
-            // Fallback to the first athlete if id 7 is not found
-            setSelectedAthleteId(mockData[0].id);
-        }
-    }
-}, [location.search, navigate]);
+      } catch (err) {
+        console.error('[Dashboard] Error fetching athletes:', err);
+        setError('Failed to load athletes.');
+        setLoading(false);
+      }
+    };
+    getAthletes();
+  }, [location.search, navigate]);
 
+  // Current selected athlete
+  const selectedAthlete = athletes.find(a => a.id === selectedAthleteId);
 
-  // Find the selected athlete from mockData
-  const selectedAthlete = mockData.find(athlete => athlete.id === selectedAthleteId);
-  // 3.4) Group data into categories
-  const getCategoryData = (p) => ({
+  // Data grouping for categories
+  const getCategoryData = (athlete) => ({
     physical: [
       { key: 'speed_explosiveness', label: 'Speed & Explosiveness' },
       { key: 'endurance', label: 'Endurance' },
@@ -3154,19 +3386,19 @@ function Dashboard() {
     ],
   });
 
-  // 3.4) We'll keep track of the active tab, default to "home"
+  // Tab management
   const [activeTab, setActiveTab] = useState('home');
 
-  // 3.5) Precompute the main category averages for radial tab display
+  // Precompute main category averages for radial tabs
   const [averages, setAverages] = useState({});
   useEffect(() => {
     if (selectedAthlete) {
-      const newAvg = computeCategoryAverages(selectedAthlete);
-      setAverages(newAvg);
+      const newAverages = computeCategoryAverages(selectedAthlete);
+      setAverages(newAverages);
     }
   }, [selectedAthlete]);
 
-  // 3.6) Radar example for “Throw Comparison” inside Offensive
+  // Example Throw Comparison Radar
   const radarLabels = [
     'Backhand Power',
     'Forehand Power',
@@ -3175,720 +3407,141 @@ function Dashboard() {
     'Forehand Accuracy',
     'Specialty Accuracy',
   ];
-  const radarDataValues = [
-    selectedAthlete.skills.backhand_power,
-    selectedAthlete.skills.forehand_power,
-    selectedAthlete.skills.specialty_power,
-    selectedAthlete.skills.backhand_accuracy,
-    selectedAthlete.skills.forehand_accuracy,
-    selectedAthlete.skills.specialty_accuracy,
-  ];
+  const radarDataValues = selectedAthlete
+    ? [
+        selectedAthlete.skills.backhand_power,
+        selectedAthlete.skills.forehand_power,
+        selectedAthlete.skills.specialty_power,
+        selectedAthlete.skills.backhand_accuracy,
+        selectedAthlete.skills.forehand_accuracy,
+        selectedAthlete.skills.specialty_accuracy,
+      ]
+    : [];
 
+  // Online/Offline status
   useEffect(() => {
     const handleOnline = () => {
       setIsOnline(true);
+      // Attempt to sync pending data if any
       SyncManager.processSyncQueue();
     };
-    const handleOffline = () => setIsOnline(false);
+    const handleOffline = () => {
+      setIsOnline(false);
+    };
 
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
-
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
   }, []);
 
-  /* -------------------------------------
-     RENDER
-  -------------------------------------- */
   return (
-    
     <div className="min-h-screen bg-gray-900 text-gray-100 flex flex-col">
-            {!isOnline && (
+      {!isOnline && (
         <div className="bg-yellow-600 text-white px-4 py-2 text-center">
           You're offline. Some features may be limited.
         </div>
       )}
-      <InstallPrompt />
-      {/** 1) Profile Header at the top */}
-      <ProfileHeader
-        name={selectedAthlete.metadata.name}
-        email={selectedAthlete.metadata.email}
-        overallScore={
-          activeTab === 'home'
-            ? computeOverallScore(selectedAthlete)
-            : averages[activeTab] || 0
-        }
-        athletes={mockData}
-        selectedAthleteId={selectedAthleteId}
-        onSelectAthlete={(id) => setSelectedAthleteId(id)} // Pass a handler
-      />
 
-      {/** 3) The radial nav row (icons + radial) for Home, Physical, Offensive, Defensive, Mental */}
+      {/* Show custom InstallPrompt for PWA */}
+      <InstallPrompt />
+
+      {/** Profile Header (only if selectedAthlete is available) */}
+      {selectedAthlete && (
+        <ProfileHeader
+          name={selectedAthlete.metadata.name}
+          email={selectedAthlete.metadata.email}
+          overallScore={
+            activeTab === 'home'
+              ? computeOverallScore(selectedAthlete)
+              : averages[activeTab] || 0
+          }
+          athletes={athletes}
+          selectedAthleteId={selectedAthleteId}
+          onSelectAthlete={(id) => setSelectedAthleteId(id)}
+        />
+      )}
+
+      {/** Radial navigation row for main tabs */}
       <RadialTabs
         activeTab={activeTab}
         onChangeTab={setActiveTab}
         averages={averages}
       />
 
-      {/** 4) Scrollable content below the radial nav */}
+      {/** Main content container */}
       <div className="flex-1 overflow-auto px-4 pb-8 mt-4">
-        {/** HOME (Dashboard) */}
-        {activeTab === 'home' && (
-          <HomeSection player={selectedAthlete} />
+        {/** Loading indicator */}
+        {loading && <LoadingState />}
+
+        {/** Error message */}
+        {error && (
+          <div className="bg-red-600 text-white px-4 py-2 rounded">
+            {error}
+          </div>
         )}
 
-        {/** PHYSICAL */}
-        {activeTab === 'physical' && (
-          <CategorySection
-            title="Physical Attributes"
-            skills={getCategoryData(selectedAthlete).physical}
-            player={selectedAthlete.skills}
-          />
-        )}
-
-        {/** OFFENSIVE */}
-        {activeTab === 'offensive' && (
+        {/** Main content if data is loaded */}
+        {!loading && !error && selectedAthlete && (
           <>
-            <OffensiveSection
-              offensiveData={getCategoryData(selectedAthlete).offensive}
-              player={selectedAthlete.skills}
+            {activeTab === 'home' && <HomeSection player={selectedAthlete} />}
+            
+            {activeTab === 'physical' && (
+              <CategorySection
+                title="Physical Attributes"
+                skills={getCategoryData(selectedAthlete).physical}
+                player={selectedAthlete.skills}
+              />
+            )}
+
+            {activeTab === 'offensive' && (
+              <>
+                <OffensiveSection
+                  offensiveData={getCategoryData(selectedAthlete).offensive}
+                  player={selectedAthlete.skills}
+                />
+                <div className="mt-6">
+                  <h2 className="text-xl font-semibold mb-2 text-gray-100">
+                    Throw Comparison
+                  </h2>
+                  <RadarChart labels={radarLabels} dataValues={radarDataValues} />
+                </div>
+              </>
+            )}
+
+            {activeTab === 'defensive' && (
+              <CategorySection
+                title="Defensive Skills"
+                skills={getCategoryData(selectedAthlete).defensive}
+                player={selectedAthlete.skills}
+              />
+            )}
+
+            {activeTab === 'mental' && (
+              <CategorySection
+                title="Mental & Recovery"
+                skills={getCategoryData(selectedAthlete).mental}
+                player={selectedAthlete.skills}
+              />
+            )}
+
+            {/* Roadmap Modal */}
+            <RoadmapModal
+              isOpen={isRoadmapOpen}
+              onClose={() => setRoadmapOpen(false)}
+              player={selectedAthlete}
             />
-            {/* Example: A Throw Comparison Radar Chart */}
-            <div className="mt-6">
-              <h2 className="text-xl font-semibold mb-2 text-gray-100">
-                Throw Comparison
-              </h2>
-              <RadarChart labels={radarLabels} dataValues={radarDataValues} />
-            </div>
+            <FloatingActionButton onClick={() => setRoadmapOpen(true)} />
           </>
         )}
-
-        {/** DEFENSIVE */}
-        {activeTab === 'defensive' && (
-          <CategorySection
-            title="Defensive Skills"
-            skills={getCategoryData(selectedAthlete).defensive}
-            player={selectedAthlete.skills}
-          />
-        )}
-
-        {/** MENTAL */}
-        {activeTab === 'mental' && (
-          <CategorySection
-            title="Mental & Recovery"
-            skills={getCategoryData(selectedAthlete).mental}
-            player={selectedAthlete.skills}
-          />
-        )}
-
-        {/* Roadmap Modal */}
-        <RoadmapModal 
-        isOpen={isRoadmapOpen}
-        onClose={() => setRoadmapOpen(false)}
-        player={selectedAthlete}
-      />
-          <FloatingActionButton onClick={() => setRoadmapOpen(true)} />
-    
-    <RoadmapModal 
-      isOpen={isRoadmapOpen}
-      onClose={() => setRoadmapOpen(false)}
-      player={selectedAthlete}
-    />
       </div>
     </div>
   );
 }
 
 export default Dashboard;
-
-
-File: src\data\mockData.js
-================================================================================
-
-// src/data/mockData.js
-
-const mockData = [
-  {
-    id: 1, // Unique identifier for each athlete
-    metadata: {
-      name: "Chris Doehring",
-      email: "doehring@umich.edu",
-      ip: "2600:387:15:4510::6",
-      user_agent: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_6_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.6 Mobile/15E148 Safari/604.1",
-      referrer: "https://ultimate-assessment.netlify.app/",
-      created_at: "2025-01-09T14:18:32.150Z",
-    },
-    growth_targets: [
-      'change_of_direction',
-      'defensive_pattern_recognition',
-      'decision_making_vision'
-    ],
-    skills: {
-      speed_explosiveness: 7,
-      endurance: 8,
-      vertical_leap: 3,
-      change_of_direction: 6,
-      boxing_out: 6,
-      laying_out: 6,
-      recovery: 7,
-      flexibility_mobility: 5,
-      injury_prevention: 7,
-      defensive_strategy: 7,
-      offensive_strategy: 8,
-      mental_game: 9,
-      feedback_implementation: 8,
-      isolation_cutting: 6,
-      continuation_cutting: 8,
-      angles: 7,
-      fakes_footwork: 5,
-      timing_field_vision: 7,
-      decisiveness: 7,
-      catching: 9,
-      zone_offense: 7,
-      reading_the_disc: 7,
-      normal_marking: 6,
-      sideline_trap_marking: 7,
-      downfield_defending: 4,
-      handler_defending: 7,
-      defensive_pattern_recognition: 6,
-      help_defense: 6,
-      switching_on_defense: 7,
-      zone_defense: 7,
-      defensive_mental_fortitude: 8,
-      handler_movement: 8,
-      poise_with_disc: 9,
-      breaking_the_mark: 8,
-      resetting_from_trap_sideline: 8,
-      decision_making_vision: 8,
-      flow_awareness: 8,
-      throw_and_go: 7,
-      offensive_pattern_recognition: 8,
-      backhand_power: 8,
-      backhand_accuracy: 7,
-      backhand_quick_release: 7,
-      backhand_release_variations: 7,
-      backhand_against_wind: 8,
-      backhand_against_difficult_marks: 7,
-      backhand_tempo_control: 8,
-      forehand_power: 4,
-      forehand_accuracy: 5,
-      forehand_quick_release: 7,
-      forehand_release_variations: 5,
-      forehand_against_wind: 4,
-      forehand_against_difficult_marks: 9,
-      forehand_tempo_control: 7,
-      specialty_power: 4,
-      specialty_accuracy: 8,
-      specialty_quick_release: 7,
-      specialty_release_variations: 5,
-      specialty_against_wind: 4,
-      specialty_against_difficult_marks: 5,
-      specialty_tempo_control: 6,
-      hucking_confidence: 7,
-      hucking_shape_control: 7,
-      hucking_tempo_control: 8,
-      hucking_placement: 7,
-    },
-  },
-  {
-    id: 2,
-    metadata: {
-      name: "Rachel Graber",
-      email: "rachelgraber16@gmail.com",
-      ip: "104.36.4.125",
-      user_agent: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_1_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.1.1 Mobile/15E148 Safari/605.1.15 (Ecosia ios@10.5.2.2065)",
-      referrer: "https://ultimate-assessment.netlify.app/",
-      created_at: "2025-01-09T14:13:29.628Z",
-    },
-    growth_targets: [
-      'defensive_pattern_recognition',
-      'breaking_the_mark',
-      'hucking_confidence'
-    ],
-    skills: {
-      speed_explosiveness: 7,
-      endurance: 7,
-      vertical_leap: 4,
-      change_of_direction: 8,
-      boxing_out: 6,
-      laying_out: 7,
-      recovery: 8,
-      flexibility_mobility: 9,
-      injury_prevention: 8,
-      defensive_strategy: 8,
-      offensive_strategy: 5,
-      mental_game: 7,
-      feedback_implementation: 8,
-      isolation_cutting: 5,
-      continuation_cutting: 7,
-      angles: 6,
-      fakes_footwork: 7,
-      timing_field_vision: 7,
-      decisiveness: 4,
-      catching: 7,
-      zone_offense: 6,
-      reading_the_disc: 6,
-      normal_marking: 7,
-      sideline_trap_marking: 7,
-      downfield_defending: 7,
-      handler_defending: 8,
-      defensive_pattern_recognition: 6,
-      help_defense: 6,
-      switching_on_defense: 6,
-      zone_defense: 8,
-      defensive_mental_fortitude: 4,
-      handler_movement: 6,
-      poise_with_disc: 6,
-      breaking_the_mark: 4,
-      resetting_from_trap_sideline: 6,
-      decision_making_vision: 5,
-      flow_awareness: 5,
-      throw_and_go: 6,
-      offensive_pattern_recognition: 5,
-      backhand_power: 8,
-      backhand_accuracy: 7,
-      backhand_quick_release: 5,
-      backhand_release_variations: 5,
-      backhand_against_wind: 4,
-      backhand_against_difficult_marks: 5,
-      backhand_tempo_control: 5,
-      forehand_power: 7,
-      forehand_accuracy: 7,
-      forehand_quick_release: 5,
-      forehand_release_variations: 6,
-      forehand_against_wind: 3,
-      forehand_against_difficult_marks: 7,
-      forehand_tempo_control: 6,
-      specialty_power: 3,
-      specialty_accuracy: 3,
-      specialty_quick_release: 3,
-      specialty_release_variations: 3,
-      specialty_against_wind: 1,
-      specialty_against_difficult_marks: 3,
-      specialty_tempo_control: 2,
-      hucking_confidence: 7,
-      hucking_shape_control: 7,
-      hucking_tempo_control: 6,
-      hucking_placement: 6,
-    },
-  },
-  {
-    id: 3,
-    metadata: {
-      name: "Charlie Vukovic",
-      email: "cavukovic@gmail.com",
-      ip: "68.109.206.199",
-      user_agent: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_1_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/131.0.6778.154 Mobile/15E148 Safari/604.1",
-      referrer: "https://ultimate-assessment.netlify.app/",
-      created_at: "2025-01-07T22:04:37.985Z",
-    },
-    growth_targets: [
-      'speed_explosiveness',
-      'defensive_mental_fortitude',
-      'continuation_cutting'
-    ],
-    skills: {
-      speed_explosiveness: 6,
-      endurance: 8,
-      vertical_leap: 7,
-      change_of_direction: 6,
-      boxing_out: 8,
-      laying_out: 4,
-      recovery: 5,
-      flexibility_mobility: 6,
-      injury_prevention: 6,
-      defensive_strategy: 8,
-      offensive_strategy: 6,
-      mental_game: 9,
-      feedback_implementation: 7,
-      isolation_cutting: 6,
-      continuation_cutting: 6,
-      angles: 5,
-      fakes_footwork: 5,
-      timing_field_vision: 4,
-      decisiveness: 5,
-      catching: 7,
-      zone_offense: 6,
-      reading_the_disc: 7,
-      normal_marking: 3,
-      sideline_trap_marking: 5,
-      downfield_defending: 6,
-      handler_defending: 4,
-      defensive_pattern_recognition: 7,
-      help_defense: 8,
-      switching_on_defense: 8,
-      zone_defense: 8,
-      defensive_mental_fortitude: 8,
-      handler_movement: 5,
-      poise_with_disc: 7,
-      breaking_the_mark: 8,
-      resetting_from_trap_sideline: 8,
-      decision_making_vision: 4,
-      flow_awareness: 5,
-      throw_and_go: 5,
-      offensive_pattern_recognition: 5,
-      backhand_power: 9,
-      backhand_accuracy: 7,
-      backhand_quick_release: 6,
-      backhand_release_variations: 6,
-      backhand_against_wind: 8,
-      backhand_against_difficult_marks: 6,
-      backhand_tempo_control: 5,
-      forehand_power: 7,
-      forehand_accuracy: 7,
-      forehand_quick_release: 7,
-      forehand_release_variations: 7,
-      forehand_against_wind: 6,
-      forehand_against_difficult_marks: 7,
-      forehand_tempo_control: 7,
-      specialty_power: 7,
-      specialty_accuracy: 6,
-      specialty_quick_release: 6,
-      specialty_release_variations: 6,
-      specialty_against_wind: 4,
-      specialty_against_difficult_marks: 6,
-      specialty_tempo_control: 4,
-      hucking_confidence: 7,
-      hucking_shape_control: 6,
-      hucking_tempo_control: 6,
-      hucking_placement: 6,
-    },
-  },
-  {
-    id: 4,
-    metadata: {
-      name: "Mark Whitton",
-      email: "whittonm@mail.gvsu.edu",
-      ip: "2601:405:4700:1db0:411b:5a4c:ddba:1afb",
-      user_agent: "Mozilla/5.0 (iPhone; CPU iPhone OS 16_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.2 Mobile/15E148 Safari/604.1",
-      referrer: "https://ultimate-assessment.netlify.app/",
-      created_at: "2025-01-07T02:07:01.581Z",
-    },
-    growth_targets: [
-      'breaking_the_mark',
-      'endurance',
-      'handler_movement'
-    ],
-    skills: {
-      speed_explosiveness: 7,
-      endurance: 6,
-      vertical_leap: 7,
-      change_of_direction: 5,
-      boxing_out: 5,
-      laying_out: 7,
-      recovery: 4,
-      flexibility_mobility: 6,
-      injury_prevention: 6,
-      defensive_strategy: 8,
-      offensive_strategy: 7,
-      mental_game: 6,
-      feedback_implementation: 6,
-      isolation_cutting: 5,
-      continuation_cutting: 6,
-      angles: 6,
-      fakes_footwork: 3,
-      timing_field_vision: 7,
-      decisiveness: 3,
-      catching: 9,
-      zone_offense: 5,
-      reading_the_disc: 7,
-      normal_marking: 6,
-      sideline_trap_marking: 8,
-      downfield_defending: 6,
-      handler_defending: 4,
-      defensive_pattern_recognition: 6,
-      help_defense: 7,
-      switching_on_defense: 8,
-      zone_defense: 7,
-      defensive_mental_fortitude: 7,
-      handler_movement: 5,
-      poise_with_disc: 7,
-      breaking_the_mark: 4,
-      resetting_from_trap_sideline: 7,
-      decision_making_vision: 4,
-      flow_awareness: 6,
-      throw_and_go: 5,
-      offensive_pattern_recognition: 5,
-      backhand_power: 8,
-      backhand_accuracy: 7,
-      backhand_quick_release: 5,
-      backhand_release_variations: 6,
-      backhand_against_wind: 9,
-      backhand_against_difficult_marks: 6,
-      backhand_tempo_control: 7,
-      forehand_power: 9,
-      forehand_accuracy: 8,
-      forehand_quick_release: 6,
-      forehand_release_variations: 6,
-      forehand_against_wind: 8,
-      forehand_against_difficult_marks: 7,
-      forehand_tempo_control: 8,
-      specialty_power: 7,
-      specialty_accuracy: 7,
-      specialty_quick_release: 6,
-      specialty_release_variations: 7,
-      specialty_against_wind: 6,
-      specialty_against_difficult_marks: 6,
-      specialty_tempo_control: 6,
-      hucking_confidence: 9,
-      hucking_shape_control: 8,
-      hucking_tempo_control: 8,
-      hucking_placement: 8,
-    },
-  },
-  {
-    id: 5,
-    metadata: {
-      name: "Rachel Mast",
-      email: "rachelgerb520@gmail.com",
-      ip: "50.126.208.197",
-      user_agent: "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36",
-      referrer: "https://ultimate-assessment.netlify.app/",
-      created_at: "2025-01-07T01:55:25.039Z",
-    },
-    growth_targets: [
-      'hucking_confidence',
-      'handler_movement',
-      'breaking_the_mark'
-    ],
-    skills: {
-      speed_explosiveness: 8,
-      endurance: 8,
-      vertical_leap: 7,
-      change_of_direction: 8,
-      boxing_out: 7,
-      laying_out: 7,
-      recovery: 10,
-      flexibility_mobility: 8,
-      injury_prevention: 9,
-      defensive_strategy: 7,
-      offensive_strategy: 7,
-      mental_game: 9,
-      feedback_implementation: 9,
-      isolation_cutting: 9,
-      continuation_cutting: 9,
-      angles: 9,
-      fakes_footwork: 7,
-      timing_field_vision: 8,
-      decisiveness: 8,
-      catching: 9,
-      zone_offense: 8,
-      reading_the_disc: 8,
-      normal_marking: 8,
-      sideline_trap_marking: 8,
-      downfield_defending: 8,
-      handler_defending: 8,
-      defensive_pattern_recognition: 6,
-      help_defense: 8,
-      switching_on_defense: 8,
-      zone_defense: 7,
-      defensive_mental_fortitude: 7,
-      handler_movement: 7,
-      poise_with_disc: 6,
-      breaking_the_mark: 6,
-      resetting_from_trap_sideline: 7,
-      decision_making_vision: 8,
-      flow_awareness: 8,
-      throw_and_go: 8,
-      offensive_pattern_recognition: 5,
-      backhand_power: 2,
-      backhand_accuracy: 7,
-      backhand_quick_release: 8,
-      backhand_release_variations: 6,
-      backhand_against_wind: 5,
-      backhand_against_difficult_marks: 6,
-      backhand_tempo_control: 6,
-      forehand_power: 2,
-      forehand_accuracy: 6,
-      forehand_quick_release: 5,
-      forehand_release_variations: 5,
-      forehand_against_wind: 1,
-      forehand_against_difficult_marks: 5,
-      forehand_tempo_control: 5,
-      specialty_power: 1,
-      specialty_accuracy: 1,
-      specialty_quick_release: 1,
-      specialty_release_variations: 1,
-      specialty_against_wind: 1,
-      specialty_against_difficult_marks: 1,
-      specialty_tempo_control: 1,
-      hucking_confidence: 2,
-      hucking_shape_control: 2,
-      hucking_tempo_control: 2,
-      hucking_placement: 2,
-    },
-  },
-  {
-    id: 6,
-    metadata: {
-      name: "Anson Reppermund",
-      email: "reprimand1000@gmail.com",
-      ip: "108.39.240.253",
-      user_agent: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_1_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.1.1 Mobile/15E148 Safari/604.1",
-      referrer: "https://ultimate-assessment.netlify.app/",
-      created_at: "2025-01-06T23:35:25.293Z",
-    },
-    growth_targets: [
-      'injury_prevention',
-      'breaking_the_mark',
-      'decisiveness'
-    ],
-    skills: {
-      speed_explosiveness: 9,
-      endurance: 5,
-      vertical_leap: 9,
-      change_of_direction: 4,
-      boxing_out: 7,
-      laying_out: 3,
-      recovery: 7,
-      flexibility_mobility: 4,
-      injury_prevention: 4,
-      defensive_strategy: 9,
-      offensive_strategy: 7,
-      mental_game: 8,
-      feedback_implementation: 6,
-      isolation_cutting: 6,
-      continuation_cutting: 5,
-      angles: 8,
-      fakes_footwork: 4,
-      timing_field_vision: 7,
-      decisiveness: 5,
-      catching: 6,
-      zone_offense: 7,
-      reading_the_disc: 9,
-      normal_marking: 5,
-      sideline_trap_marking: 8,
-      downfield_defending: 10,
-      handler_defending: 3,
-      defensive_pattern_recognition: 10,
-      help_defense: 10,
-      switching_on_defense: 9,
-      zone_defense: 8,
-      defensive_mental_fortitude: 7,
-      handler_movement: 8,
-      poise_with_disc: 6,
-      breaking_the_mark: 4,
-      resetting_from_trap_sideline: 7,
-      decision_making_vision: 7,
-      flow_awareness: 6,
-      throw_and_go: 5,
-      offensive_pattern_recognition: 5,
-      backhand_power: 8,
-      backhand_accuracy: 5,
-      backhand_quick_release: 8,
-      backhand_release_variations: 7,
-      backhand_against_wind: 7,
-      backhand_against_difficult_marks: 3,
-      backhand_tempo_control: 5,
-      forehand_power: 5,
-      forehand_accuracy: 6,
-      forehand_quick_release: 4,
-      forehand_release_variations: 4,
-      forehand_against_wind: 6,
-      forehand_against_difficult_marks: 5,
-      forehand_tempo_control: 5,
-      specialty_power: 6,
-      specialty_accuracy: 5,
-      specialty_quick_release: 5,
-      specialty_release_variations: 7,
-      specialty_against_wind: 3,
-      specialty_against_difficult_marks: 6,
-      specialty_tempo_control: 5,
-      hucking_confidence: 5,
-      hucking_shape_control: 6,
-      hucking_tempo_control: 5,
-      hucking_placement: 6,
-    },
-  },
-  {
-    id: 7,
-    metadata: {
-      name: "Jonathan Mast",
-      email: "jon1mast@gmail.com",
-      ip: "50.126.208.197",
-      user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0",
-      referrer: "https://ultimate-assessment.netlify.app/",
-      created_at: "2025-01-06T23:28:51.361Z",
-    },
-    growth_targets: [
-      'endurance',
-      'speed_explosiveness',
-      'decisiveness'
-    ],
-    skills: {
-      speed_explosiveness: 4,
-      endurance: 3,
-      vertical_leap: 3,
-      change_of_direction: 5,
-      boxing_out: 7,
-      laying_out: 1,
-      recovery: 6,
-      flexibility_mobility: 7,
-      injury_prevention: 4,
-      defensive_strategy: 7,
-      offensive_strategy: 9,
-      mental_game: 9,
-      feedback_implementation: 10,
-      isolation_cutting: 3,
-      continuation_cutting: 4,
-      angles: 6,
-      fakes_footwork: 5,
-      timing_field_vision: 6,
-      decisiveness: 5,
-      catching: 9,
-      zone_offense: 8,
-      reading_the_disc: 9,
-      normal_marking: 8,
-      sideline_trap_marking: 9,
-      downfield_defending: 4,
-      handler_defending: 6,
-      defensive_pattern_recognition: 6,
-      help_defense: 8,
-      switching_on_defense: 8,
-      zone_defense: 6,
-      defensive_mental_fortitude: 4,
-      handler_movement: 9,
-      poise_with_disc: 10,
-      breaking_the_mark: 9,
-      resetting_from_trap_sideline: 9,
-      decision_making_vision: 8,
-      flow_awareness: 9,
-      throw_and_go: 8,
-      offensive_pattern_recognition: 9,
-      backhand_power: 9,
-      backhand_accuracy: 9,
-      backhand_quick_release: 9,
-      backhand_release_variations: 9,
-      backhand_against_wind: 8,
-      backhand_against_difficult_marks: 9,
-      backhand_tempo_control: 9,
-      forehand_power: 8,
-      forehand_accuracy: 9,
-      forehand_quick_release: 10,
-      forehand_release_variations: 10,
-      forehand_against_wind: 8,
-      forehand_against_difficult_marks: 10,
-      forehand_tempo_control: 10,
-      specialty_power: 8,
-      specialty_accuracy: 8,
-      specialty_quick_release: 8,
-      specialty_release_variations: 10,
-      specialty_against_wind: 6,
-      specialty_against_difficult_marks: 8,
-      specialty_tempo_control: 8,
-      hucking_confidence: 7,
-      hucking_shape_control: 7,
-      hucking_tempo_control: 7,
-      hucking_placement: 9,
-    },
-  },
-  // Add more athletes as needed
-];
-
-export default mockData;
 
 
 File: src\hooks\usePreloadState.js
@@ -3953,27 +3606,36 @@ body {
 File: src\index.js
 ================================================================================
 
-// src/index.js
+/* ------------------------------------------
+   index.js (Refactored)
+------------------------------------------- */
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import './index.css';
 import App from './App.jsx';
-import { BrowserRouter } from 'react-router-dom'; // Import BrowserRouter
+import { BrowserRouter } from 'react-router-dom';
 import { registerServiceWorker } from './serviceWorkerRegistration';
 
+// Create the root container for our React app
+const rootElement = document.getElementById('root');
+const root = ReactDOM.createRoot(rootElement);
 
-const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(
   <React.StrictMode>
-    <BrowserRouter> {/* Wrap App with BrowserRouter */}
-      <div className="dark">  {/* <-- Force dark mode */}
+    <BrowserRouter>
+      {/* Force dark mode for the entire application */}
+      <div className="dark">
         <App />
       </div>
     </BrowserRouter>
   </React.StrictMode>
 );
+
+// Register the service worker for offline capabilities
 registerServiceWorker();
-if (navigator.serviceWorker.controller) {
+
+// Log service worker control status
+if (navigator.serviceWorker && navigator.serviceWorker.controller) {
   console.log('[SW] Service worker is controlling the page');
 } else {
   console.warn('[SW] Service worker is NOT controlling the page');
@@ -3998,67 +3660,120 @@ const reportWebVitals = onPerfEntry => {
 export default reportWebVitals;
 
 
+File: src\services\athleteService.js
+================================================================================
+
+// src/services/athleteService.js
+
+import { collection, getDocs, addDoc, doc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { db } from '../config/firebase';
+
+/**
+ * Fetch all athletes
+ */
+export const fetchAthletes = async () => {
+  const athletesCol = collection(db, 'athletes');
+  const athletesSnapshot = await getDocs(athletesCol);
+  const athletesList = athletesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+  return athletesList;
+};
+
+/**
+ * Add a new athlete
+ */
+export const addAthlete = async (athleteData) => {
+  const athletesCol = collection(db, 'athletes');
+  const docRef = await addDoc(athletesCol, athleteData);
+  return docRef.id;
+};
+
+/**
+ * Update an athlete
+ */
+export const updateAthlete = async (id, updatedData) => {
+  const athleteDoc = doc(db, 'athletes', id);
+  await updateDoc(athleteDoc, updatedData);
+};
+
+/**
+ * Delete an athlete
+ */
+export const deleteAthlete = async (id) => {
+  const athleteDoc = doc(db, 'athletes', id);
+  await deleteDoc(athleteDoc);
+};
+
+
 File: src\serviceWorkerRegistration.js
 ================================================================================
 
-// src/serviceWorkerRegistration.js
+/* ------------------------------------------
+   serviceWorkerRegistration.js (Refactored)
+------------------------------------------- */
 
 export function registerServiceWorker() {
-  if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-      navigator.serviceWorker.register('/service-worker.js')
-        .then((registration) => {
-          console.log('[SW] Registration successful:', registration);
-
-          // Listen for updates to the service worker.
-          registration.addEventListener('updatefound', () => {
-            const newWorker = registration.installing;
-            console.log('[SW] New worker being installed:', newWorker);
-
-            newWorker.addEventListener('statechange', () => {
-              console.log('[SW] New worker state:', newWorker.state);
-              if (newWorker.state === 'installed') {
-                if (navigator.serviceWorker.controller) {
-                  // New update available
-                  console.log('[SW] New update available');
-                  // Optionally, notify the user about the update
-                } else {
-                  // Content cached for offline use
-                  console.log('[SW] Content cached for offline use');
-                }
-              }
-            });
-          });
-
-          // Check for controlling service worker
-          if (navigator.serviceWorker.controller) {
-            console.log('[SW] Service worker is controlling the page');
-          } else {
-            console.log('[SW] Service worker is NOT controlling the page');
-          }
-
-        })
-        .catch((error) => {
-          console.error('[SW] Service worker registration failed:', error);
-        });
-    });
-
-    // Reload the page when the service worker updates
-    let refreshing = false;
-    navigator.serviceWorker.addEventListener('controllerchange', () => {
-      if (!refreshing) {
-        refreshing = true;
-        window.location.reload();
-      }
-    });
-
-    // Handle messages from the service worker
-    navigator.serviceWorker.addEventListener('message', (event) => {
-      console.log('[SW] Received message:', event.data);
-    });
-  } else {
-    console.log('[SW] Service workers are not supported');
+  // Check if the browser supports service workers
+  if (!('serviceWorker' in navigator)) {
+    console.log('[SW] Service workers are not supported in this browser.');
+    return;
   }
+
+  // Register the service worker after the window loads
+  window.addEventListener('load', () => {
+    navigator.serviceWorker
+      .register('/service-worker.js')
+      .then((registration) => {
+        console.log('[SW] Registration successful:', registration);
+
+        // Listen for updates to the service worker
+        registration.addEventListener('updatefound', () => {
+          const installingWorker = registration.installing;
+          console.log('[SW] New worker installing:', installingWorker);
+
+          // Track the state of the new worker
+          installingWorker.addEventListener('statechange', () => {
+            console.log('[SW] New worker state:', installingWorker.state);
+
+            if (installingWorker.state === 'installed') {
+              if (navigator.serviceWorker.controller) {
+                // There's an existing SW, so this is an update
+                console.log('[SW] New update available');
+                // Optionally, display a notification or UI prompt to the user
+              } else {
+                // First SW install: content is now cached for offline use
+                console.log('[SW] Content cached for offline use');
+              }
+            }
+          });
+        });
+
+        // Check if the SW is already controlling the page
+        if (navigator.serviceWorker.controller) {
+          console.log('[SW] Service worker is controlling the page');
+        } else {
+          console.log('[SW] Service worker is NOT controlling the page');
+        }
+      })
+      .catch((error) => {
+        console.error('[SW] Service worker registration failed:', error);
+      });
+  });
+
+  // Reload the page when the service worker updates to the new version
+  let refreshing = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!refreshing) {
+      refreshing = true;
+      // Reload the page to allow the new service worker to control
+      window.location.reload();
+    }
+  });
+
+  // Listen for messages from the service worker
+  navigator.serviceWorker.addEventListener('message', (event) => {
+    console.log('[SW] Received message from service worker:', event.data);
+    // For example, handle 'CACHE_UPDATED' messages or other custom events
+  });
 }
 
 
@@ -4411,47 +4126,25 @@ const ProtectedRoute = lazy(() => import('./components/auth/ProtectedRoute'));
 function App() {
   return (
     <AuthProvider>
-      <Routes>
-        <Route 
-          path="/login" 
-          element={
-            <Suspense fallback={
-              <div className="min-h-screen bg-gray-900 flex items-center justify-center">
-                <h1 className="text-xl text-gray-200">Welcome back</h1>
-              </div>
-            }>
-              <LoginPage />
-            </Suspense>
-          } 
-        />
-        <Route
-          path="/*"
-          element={
-            <Suspense fallback={<LoadingState />}>
+      {/* Single Suspense boundary at the root */}
+      <Suspense fallback={<LoadingState />}>
+        <Routes>
+          <Route path="/login" element={<LoginPage />} />
+          <Route
+            path="/*"
+            element={
               <ProtectedRoute>
                 <Dashboard />
               </ProtectedRoute>
-            </Suspense>
-          }
-        />
-      </Routes>
+            }
+          />
+        </Routes>
+      </Suspense>
     </AuthProvider>
   );
 }
 
 export default App;
-
-File: src\App.test.js
-================================================================================
-
-import { render, screen } from '@testing-library/react';
-import App from './App';
-
-test('renders learn react link', () => {
-  render(<App />);
-  const linkElement = screen.getByText(/learn react/i);
-  expect(linkElement).toBeInTheDocument();
-});
 
 
 File: src\components\AthleteDropdown.jsx
@@ -4538,6 +4231,31 @@ const AthleteDropdown = ({ athletes, selectedAthleteId, onSelectAthlete }) => {
 };
 
 export default AthleteDropdown;
+
+
+File: src\components\AthleteList.jsx
+================================================================================
+
+// src/components/AthleteList.jsx
+
+import React from 'react';
+
+const AthleteList = ({ athletes }) => {
+  return (
+    <div>
+      <h2>Athletes</h2>
+      <ul>
+        {athletes.map(athlete => (
+          <li key={athlete.id}>
+            <strong>{athlete.metadata.name}</strong> - {athlete.metadata.email}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+};
+
+export default AthleteList;
 
 
 File: src\components\auth\LoginPage.jsx
@@ -4855,16 +4573,26 @@ File: src\components\auth\ProtectedRoute.jsx
 // src/components/auth/ProtectedRoute.jsx
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import { LoadingState } from '../LoadingState'; // adjust import path if needed
 
 export default function ProtectedRoute({ children }) {
-  const { user } = useAuth();
-  
+  const { user, loading } = useAuth(); 
+  // ^ Make sure your AuthContext provides both `user` and `loading` (or `authLoading`).
+
+  // 1) If Auth is still loading, show a spinner (or any fallback).
+  if (loading) {
+    return <LoadingState />;
+  }
+
+  // 2) If no user, redirect to login page.
   if (!user) {
     return <Navigate to="/login" replace />;
   }
 
+  // 3) Otherwise, render the protected component(s).
   return children;
 }
+
 
 File: src\components\CategorySection.jsx
 ================================================================================
@@ -4892,6 +4620,41 @@ const CategorySection = ({ title, skills, player }) => {
 };
 
 export default CategorySection;
+
+
+File: src\components\FirestoreTest.jsx
+================================================================================
+
+// src/components/FirestoreTest.jsx
+
+import React, { useEffect } from 'react';
+import { db } from '../config/firebase';
+import { collection, getDocs } from 'firebase/firestore';
+
+const FirestoreTest = () => {
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const athletesCol = collection(db, 'athletes');
+        const athletesSnapshot = await getDocs(athletesCol);
+        const athletesList = athletesSnapshot.docs.map(doc => doc.data());
+        console.log('Athletes:', athletesList);
+      } catch (error) {
+        console.error('Error fetching athletes:', error);
+      }
+    };
+
+    fetchData();
+  }, []);
+
+  return (
+    <div>
+      <h2>Firestore Test</h2>
+    </div>
+  );
+};
+
+export default FirestoreTest;
 
 
 File: src\components\FloatingActionButton.jsx
@@ -5080,80 +4843,103 @@ File: src\components\InstallPrompt.jsx
 ================================================================================
 
 // src/components/InstallPrompt.jsx
+
 import React, { useState, useEffect } from 'react';
 
 export function InstallPrompt() {
   const [installPrompt, setInstallPrompt] = useState(null);
-  const [debugInfo, setDebugInfo] = useState({ 
-    isStandalone: false, 
+  const [debugInfo, setDebugInfo] = useState({
+    isStandalone: false,
     hasShownPrompt: false,
-    promptEventReceived: false 
+    promptEventReceived: false,
+    isSecureContext: false,
+    isSupportedBrowser: false,
+    debugMessages: []
   });
 
   useEffect(() => {
-    console.log('[InstallPrompt] Component mounted');
+    const newDebugMessages = [];
+    
+    // Check if served over HTTPS or localhost
+    const isSecure = window.isSecureContext || window.location.hostname === 'localhost';
+    newDebugMessages.push(`isSecureContext: ${isSecure}`);
+
+    // Basic check for browser support (Chrome, Edge, etc. - iOS Safari won't fire BIP)
+    const isSupported = 'BeforeInstallPromptEvent' in window || 'onbeforeinstallprompt' in window;
+    newDebugMessages.push(`isSupportedBrowser: ${isSupported}`);
 
     // Check if running in standalone mode
-    const isStandalone = window.matchMedia('(display-mode: standalone)').matches 
-      || window.navigator.standalone 
-      || document.referrer.includes('android-app://');
-      
-    console.log('[InstallPrompt] Is standalone:', isStandalone);
+    const isStandalone =
+      window.matchMedia('(display-mode: standalone)').matches ||
+      window.navigator.standalone ||
+      document.referrer.includes('android-app://');
+    newDebugMessages.push(`isStandalone: ${isStandalone}`);
 
-    const hasShownPrompt = localStorage.getItem('installPromptShown');
-    console.log('[InstallPrompt] Previously shown:', hasShownPrompt);
+    let hasShownPrompt = false;
+    try {
+      hasShownPrompt = !!localStorage.getItem('installPromptShown');
+      newDebugMessages.push(`localStorage installPromptShown: ${hasShownPrompt}`);
+    } catch (err) {
+      newDebugMessages.push(`Error accessing localStorage: ${err.message}`);
+    }
 
-    setDebugInfo(prev => ({
+    setDebugInfo((prev) => ({
       ...prev,
-      isStandalone,
-      hasShownPrompt: !!hasShownPrompt
+      isSecureContext: isSecure,
+      isSupportedBrowser: isSupported,
+      isStandalone: isStandalone,
+      hasShownPrompt: hasShownPrompt,
+      debugMessages: [...prev.debugMessages, ...newDebugMessages]
     }));
 
-    // Handle the beforeinstallprompt event
     const handleBeforeInstallPrompt = (e) => {
-      console.log('[InstallPrompt] beforeinstallprompt event fired', e);
+      console.log('[InstallPrompt] beforeinstallprompt fired');
       e.preventDefault();
       setInstallPrompt(e);
-      setDebugInfo(prev => ({ ...prev, promptEventReceived: true }));
+
+      setDebugInfo((prev) => ({
+        ...prev,
+        promptEventReceived: true,
+        debugMessages: [...prev.debugMessages, 'BIP event captured']
+      }));
     };
 
-    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-
-    // Listen for appinstalled event
-    const handleAppInstalled = (e) => {
-      console.log('[InstallPrompt] App was installed', e);
-      localStorage.setItem('installPromptShown', 'true');
+    const handleAppInstalled = () => {
+      console.log('[InstallPrompt] App installed');
+      // Mark as shown so we don’t pester the user again
+      try {
+        localStorage.setItem('installPromptShown', 'true');
+      } catch (err) {
+        console.warn('[InstallPrompt] Could not save install state:', err);
+      }
       setInstallPrompt(null);
     };
 
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
     window.addEventListener('appinstalled', handleAppInstalled);
-    
+
     return () => {
       window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
       window.removeEventListener('appinstalled', handleAppInstalled);
     };
   }, []);
 
-  // Log state changes
+  // Additional debug logging whenever debugInfo changes
   useEffect(() => {
-    console.log('[InstallPrompt] State updated:', {
-      hasPrompt: !!installPrompt,
-      debugInfo
-    });
-  }, [installPrompt, debugInfo]);
+    console.log('[InstallPrompt] debugInfo updated:', debugInfo);
+  }, [debugInfo]);
 
   const handleInstall = async () => {
     if (!installPrompt) {
       console.log('[InstallPrompt] No install prompt available');
       return;
     }
-
     try {
-      console.log('[InstallPrompt] Triggering install prompt');
       installPrompt.prompt();
-      const result = await installPrompt.userChoice;
-      console.log('[InstallPrompt] Install prompt result:', result);
-      if (result.outcome === 'accepted') {
+      const choiceResult = await installPrompt.userChoice;
+      console.log('[InstallPrompt] userChoice outcome:', choiceResult.outcome);
+
+      if (choiceResult.outcome === 'accepted') {
         console.log('[InstallPrompt] User accepted the install prompt');
       } else {
         console.log('[InstallPrompt] User dismissed the install prompt');
@@ -5161,39 +4947,43 @@ export function InstallPrompt() {
       setInstallPrompt(null);
       localStorage.setItem('installPromptShown', 'true');
     } catch (error) {
-      console.error('[InstallPrompt] Error installing app:', error);
+      console.error('[InstallPrompt] Error during install prompt:', error);
     }
   };
 
   const handleDismiss = () => {
-    console.log('[InstallPrompt] Prompt dismissed');
+    console.log('[InstallPrompt] Prompt dismissed by user');
     setInstallPrompt(null);
-    localStorage.setItem('installPromptShown', 'true');
+    try {
+      localStorage.setItem('installPromptShown', 'true');
+    } catch (err) {
+      console.warn('[InstallPrompt] Could not save dismiss state:', err);
+    }
   };
 
-  // Early return conditions
+  // If app is already installed, do not show
   if (debugInfo.isStandalone) {
-    console.log('[InstallPrompt] App is installed, not showing prompt');
     return null;
   }
 
+  // If user has previously dismissed or accepted
   if (debugInfo.hasShownPrompt) {
-    console.log('[InstallPrompt] Install prompt has already been shown');
     return null;
   }
 
+  // If no prompt event captured
   if (!installPrompt) {
-    console.log('[InstallPrompt] No prompt available, not showing UI');
     return null;
   }
 
+  // Render your custom prompt UI
   return (
-    <div className="fixed bottom-4 left-4 right-4 md:left-auto md:right-4 md:w-96 bg-gray-800 p-4 rounded-lg shadow-lg z-50 border border-gray-700">
+    <div className="fixed bottom-4 left-4 right-4 md:right-4 md:w-96 bg-gray-800 p-4 rounded-lg shadow-lg z-50 border border-gray-700">
       <div className="flex flex-col space-y-3">
         <div>
-          <h3 className="text-gray-100 font-medium">Install Performance Tracker</h3>
+          <h3 className="text-gray-100 font-medium">Install Ultify</h3>
           <p className="text-gray-400 text-sm mt-1">
-            Install our app for the best experience and offline access
+            Get the best experience and offline functionality by installing the app.
           </p>
         </div>
 
@@ -5220,31 +5010,23 @@ export function InstallPrompt() {
 File: src\components\LoadingState.jsx
 ================================================================================
 
-// src/components/LoadingState.jsx
-export function LoadingState() {
+export function LoadingState({ size = 'h-16 w-16', color = 'emerald-500', text = 'Loading...' }) {
   return (
-    <div className="min-h-screen w-full">
-      {/* Background placeholder */}
-      <div 
-        className="absolute inset-0 bg-gradient-to-b from-gray-800 to-gray-900 animate-pulse"
-        style={{
-          backgroundSize: 'cover',
-          backgroundPosition: 'center',
-        }}
-      />
-      
-      {/* Loading spinner overlay */}
-      <div className="relative z-10 flex items-center justify-center min-h-screen">
-        <div className="flex flex-col items-center gap-4">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-emerald-500" />
-          <div className="text-gray-300 text-sm animate-pulse">
-            Loading...
-          </div>
-        </div>
+    <div className="fixed inset-0 flex items-center justify-center bg-gray-900 bg-opacity-75 z-50">
+      <div className="flex flex-col items-center gap-4">
+        {/* Loading Spinner */}
+        <div
+          className={`animate-spin rounded-full ${size} border-t-4 border-b-4 border-${color}`}
+          role="status"
+          aria-label="Loading"
+        />
+        {/* Loading Text */}
+        <div className="text-gray-300 text-lg">{text}</div>
       </div>
     </div>
   );
 }
+
 
 File: src\components\MiniRadial.jsx
 ================================================================================
@@ -5366,15 +5148,40 @@ const OptimizedBackground = () => {
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
-    // Preload the next larger image size after component mounts
-    const preloadLargerImage = new Image();
-    preloadLargerImage.src = '/images/background-lg.webp';
+    // Check if we already have a preload link for any of our background images
+    const existingPreload = document.querySelector('link[rel="preload"][href*="background"]');
+    
+    // Only add new preload if we don't already have one
+    if (!existingPreload) {
+      const isMobile = window.innerWidth < 768;
+
+      const link = document.createElement('link');
+      link.rel = 'preload';
+      link.as = 'image';
+      link.type = 'image/webp';
+
+      if (isMobile) {
+        link.href = '/images/background-mobileSm.webp';
+        link.media = '(max-width: 767px)';
+      } else {
+        link.href = '/images/background-sm.webp';
+        link.media = '(min-width: 768px)';
+      }
+
+      document.head.appendChild(link);
+
+      return () => {
+        if (link.parentNode) {
+          link.parentNode.removeChild(link);
+        }
+      };
+    }
   }, []);
 
   return (
     <>
-      {/* Placeholder while image loads */}
-      <div 
+      {/* Placeholder overlay while the main image loads */}
+      <div
         className={`absolute inset-0 bg-gradient-to-b from-gray-800 to-gray-900 transition-opacity duration-500 ${
           loaded ? 'opacity-0' : 'opacity-100'
         }`}
@@ -5447,29 +5254,12 @@ const OptimizedBackground = () => {
           }}
         />
       </picture>
-
-      {/* Preload tags for critical images */}
-      <link
-        rel="preload"
-        as="image"
-        href="/images/background-sm.webp"
-        type="image/webp"
-        media="(max-width: 767px)"
-        fetchpriority="high"
-      />
-      <link
-        rel="preload"
-        as="image"
-        href="/images/background-md.webp"
-        type="image/webp"
-        media="(min-width: 768px)"
-        fetchpriority="high"
-      />
     </>
   );
 };
 
 export default OptimizedBackground;
+
 
 File: src\components\OverallScoreRing.jsx
 ================================================================================
@@ -5535,7 +5325,6 @@ import { ChevronDown } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import OverallScoreRing from './OverallScoreRing';
-import backgroundImage from '../assets/background.jpg';
 import OptimizedBackground from './OptimizedBackground';
 
 const ProfileHeader = ({ 
@@ -6624,9 +6413,13 @@ File: src\config\firebase.js
 ================================================================================
 
 // src/config/firebase.js
+
 import { initializeApp } from "firebase/app";
 import { getAnalytics } from "firebase/analytics";
+import { getAuth } from "firebase/auth";
+import { getFirestore } from "firebase/firestore";
 
+// Your Firebase configuration object
 const firebaseConfig = {
   apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
   authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN,
@@ -6637,21 +6430,45 @@ const firebaseConfig = {
   measurementId: process.env.REACT_APP_FIREBASE_MEASUREMENT_ID
 };
 
+// Initialize Firebase App, Auth, Firestore, and Analytics
 let app = null;
 let analytics = null;
+let auth = null;
+let db = null;
 
+/**
+ * Initializes Firebase services.
+ * Ensures that Firebase is initialized only once.
+ * 
+ * @returns {FirebaseApp} The initialized Firebase app instance.
+ */
 export const initializeFirebase = () => {
   if (!app) {
+    // Initialize Firebase App
     app = initializeApp(firebaseConfig);
-    // Defer analytics initialization
+    
+    // Initialize Firebase Authentication
+    auth = getAuth(app);
+    
+    // Initialize Firestore
+    db = getFirestore(app);
+    
+    // Defer Analytics initialization by 2 seconds
     setTimeout(() => {
       analytics = getAnalytics(app);
     }, 2000);
+    
+    console.log("Firebase initialized successfully.");
   }
   return app;
 };
 
-export { app };
+// Immediately initialize Firebase when this module is imported
+initializeFirebase();
+
+// Export Firebase services for use in other parts of your application
+export { app, auth, db };
+
 
 File: src\contexts\AuthContext.js
 ================================================================================
@@ -6760,29 +6577,22 @@ export function AuthProvider({ children }) {
 File: src\Dashboard.jsx
 ================================================================================
 
-// src/Dashboard.jsx
-
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import mockData from './data/mockData';
 import ProfileHeader from './components/ProfileHeader';
 import CategorySection from './components/CategorySection';
 import RadarChart from './components/RadarChart';
 import OffensiveSection from './components/OffensiveSection';
 import RadialTabs from './components/RadialTabs';
 import { computeCategoryAverages, computeOverallScore } from './utils/helpers';
-import HomeSection from './components/HomeSection';  // Add this import if not already there
+import HomeSection from './components/HomeSection';
 import { SyncManager } from './utils/sync';
 import { InstallPrompt } from './components/InstallPrompt';
 import RoadmapModal from './components/RoadmapModal';
 import FloatingActionButton from './components/FloatingActionButton';
-
-
 import './index.css';
-
-/* -------------------------------------
-   3) MAIN APP
--------------------------------------- */
+import { fetchAthletes } from './services/athleteService';
+import { LoadingState } from './components/LoadingState';
 
 function Dashboard() {
   const location = useLocation();
@@ -6791,39 +6601,52 @@ function Dashboard() {
   const [syncPending, setSyncPending] = useState(false);
   const [isRoadmapOpen, setRoadmapOpen] = useState(false);
 
-  // 3.1) Manage Selected Athlete
-  const [selectedAthleteId, setSelectedAthleteId] = useState(mockData[0].id);
+  // Athlete selection
+  const [selectedAthleteId, setSelectedAthleteId] = useState(null);
 
-  // 3.2) Automatically select athlete based on URL parameters
+  // Data fetching states
+  const [athletes, setAthletes] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  // Fetch athletes from Firestore
   useEffect(() => {
-    const searchParams = new URLSearchParams(location.search);
-    const athleteIdFromUrl = searchParams.get('id');
+    const getAthletes = async () => {
+      try {
+        const data = await fetchAthletes();
+        setAthletes(data);
+        setLoading(false);
 
-    if (athleteIdFromUrl) {
-        const athleteId = parseInt(athleteIdFromUrl, 10);
-        const athleteExists = mockData.some(a => a.id === athleteId);
-        if (athleteExists) {
-            setSelectedAthleteId(athleteId);
-        } else {
+        // URL parameter check for athlete ID
+        const searchParams = new URLSearchParams(location.search);
+        const athleteIdFromUrl = searchParams.get('id');
+
+        if (athleteIdFromUrl) {
+          const athleteExists = data.some(a => a.id === athleteIdFromUrl);
+          if (athleteExists) {
+            setSelectedAthleteId(athleteIdFromUrl);
+          } else {
+            console.warn(`[Dashboard] Athlete ID ${athleteIdFromUrl} not found, redirecting.`);
             navigate('/', { replace: true });
+          }
+        } else if (data.length > 0) {
+          // Default to the first athlete
+          setSelectedAthleteId(data[0].id);
         }
-    } else if (mockData.length > 0) {
-        // Default to athlete with id 7 if available
-        const defaultAthlete = mockData.find(a => a.id === 7);
-        if (defaultAthlete) {
-            setSelectedAthleteId(7);
-        } else {
-            // Fallback to the first athlete if id 7 is not found
-            setSelectedAthleteId(mockData[0].id);
-        }
-    }
-}, [location.search, navigate]);
+      } catch (err) {
+        console.error('[Dashboard] Error fetching athletes:', err);
+        setError('Failed to load athletes.');
+        setLoading(false);
+      }
+    };
+    getAthletes();
+  }, [location.search, navigate]);
 
+  // Current selected athlete
+  const selectedAthlete = athletes.find(a => a.id === selectedAthleteId);
 
-  // Find the selected athlete from mockData
-  const selectedAthlete = mockData.find(athlete => athlete.id === selectedAthleteId);
-  // 3.4) Group data into categories
-  const getCategoryData = (p) => ({
+  // Data grouping for categories
+  const getCategoryData = (athlete) => ({
     physical: [
       { key: 'speed_explosiveness', label: 'Speed & Explosiveness' },
       { key: 'endurance', label: 'Endurance' },
@@ -6910,19 +6733,19 @@ function Dashboard() {
     ],
   });
 
-  // 3.4) We'll keep track of the active tab, default to "home"
+  // Tab management
   const [activeTab, setActiveTab] = useState('home');
 
-  // 3.5) Precompute the main category averages for radial tab display
+  // Precompute main category averages for radial tabs
   const [averages, setAverages] = useState({});
   useEffect(() => {
     if (selectedAthlete) {
-      const newAvg = computeCategoryAverages(selectedAthlete);
-      setAverages(newAvg);
+      const newAverages = computeCategoryAverages(selectedAthlete);
+      setAverages(newAverages);
     }
   }, [selectedAthlete]);
 
-  // 3.6) Radar example for “Throw Comparison” inside Offensive
+  // Example Throw Comparison Radar
   const radarLabels = [
     'Backhand Power',
     'Forehand Power',
@@ -6931,720 +6754,141 @@ function Dashboard() {
     'Forehand Accuracy',
     'Specialty Accuracy',
   ];
-  const radarDataValues = [
-    selectedAthlete.skills.backhand_power,
-    selectedAthlete.skills.forehand_power,
-    selectedAthlete.skills.specialty_power,
-    selectedAthlete.skills.backhand_accuracy,
-    selectedAthlete.skills.forehand_accuracy,
-    selectedAthlete.skills.specialty_accuracy,
-  ];
+  const radarDataValues = selectedAthlete
+    ? [
+        selectedAthlete.skills.backhand_power,
+        selectedAthlete.skills.forehand_power,
+        selectedAthlete.skills.specialty_power,
+        selectedAthlete.skills.backhand_accuracy,
+        selectedAthlete.skills.forehand_accuracy,
+        selectedAthlete.skills.specialty_accuracy,
+      ]
+    : [];
 
+  // Online/Offline status
   useEffect(() => {
     const handleOnline = () => {
       setIsOnline(true);
+      // Attempt to sync pending data if any
       SyncManager.processSyncQueue();
     };
-    const handleOffline = () => setIsOnline(false);
+    const handleOffline = () => {
+      setIsOnline(false);
+    };
 
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
-
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
   }, []);
 
-  /* -------------------------------------
-     RENDER
-  -------------------------------------- */
   return (
-    
     <div className="min-h-screen bg-gray-900 text-gray-100 flex flex-col">
-            {!isOnline && (
+      {!isOnline && (
         <div className="bg-yellow-600 text-white px-4 py-2 text-center">
           You're offline. Some features may be limited.
         </div>
       )}
-      <InstallPrompt />
-      {/** 1) Profile Header at the top */}
-      <ProfileHeader
-        name={selectedAthlete.metadata.name}
-        email={selectedAthlete.metadata.email}
-        overallScore={
-          activeTab === 'home'
-            ? computeOverallScore(selectedAthlete)
-            : averages[activeTab] || 0
-        }
-        athletes={mockData}
-        selectedAthleteId={selectedAthleteId}
-        onSelectAthlete={(id) => setSelectedAthleteId(id)} // Pass a handler
-      />
 
-      {/** 3) The radial nav row (icons + radial) for Home, Physical, Offensive, Defensive, Mental */}
+      {/* Show custom InstallPrompt for PWA */}
+      <InstallPrompt />
+
+      {/** Profile Header (only if selectedAthlete is available) */}
+      {selectedAthlete && (
+        <ProfileHeader
+          name={selectedAthlete.metadata.name}
+          email={selectedAthlete.metadata.email}
+          overallScore={
+            activeTab === 'home'
+              ? computeOverallScore(selectedAthlete)
+              : averages[activeTab] || 0
+          }
+          athletes={athletes}
+          selectedAthleteId={selectedAthleteId}
+          onSelectAthlete={(id) => setSelectedAthleteId(id)}
+        />
+      )}
+
+      {/** Radial navigation row for main tabs */}
       <RadialTabs
         activeTab={activeTab}
         onChangeTab={setActiveTab}
         averages={averages}
       />
 
-      {/** 4) Scrollable content below the radial nav */}
+      {/** Main content container */}
       <div className="flex-1 overflow-auto px-4 pb-8 mt-4">
-        {/** HOME (Dashboard) */}
-        {activeTab === 'home' && (
-          <HomeSection player={selectedAthlete} />
+        {/** Loading indicator */}
+        {loading && <LoadingState />}
+
+        {/** Error message */}
+        {error && (
+          <div className="bg-red-600 text-white px-4 py-2 rounded">
+            {error}
+          </div>
         )}
 
-        {/** PHYSICAL */}
-        {activeTab === 'physical' && (
-          <CategorySection
-            title="Physical Attributes"
-            skills={getCategoryData(selectedAthlete).physical}
-            player={selectedAthlete.skills}
-          />
-        )}
-
-        {/** OFFENSIVE */}
-        {activeTab === 'offensive' && (
+        {/** Main content if data is loaded */}
+        {!loading && !error && selectedAthlete && (
           <>
-            <OffensiveSection
-              offensiveData={getCategoryData(selectedAthlete).offensive}
-              player={selectedAthlete.skills}
+            {activeTab === 'home' && <HomeSection player={selectedAthlete} />}
+            
+            {activeTab === 'physical' && (
+              <CategorySection
+                title="Physical Attributes"
+                skills={getCategoryData(selectedAthlete).physical}
+                player={selectedAthlete.skills}
+              />
+            )}
+
+            {activeTab === 'offensive' && (
+              <>
+                <OffensiveSection
+                  offensiveData={getCategoryData(selectedAthlete).offensive}
+                  player={selectedAthlete.skills}
+                />
+                <div className="mt-6">
+                  <h2 className="text-xl font-semibold mb-2 text-gray-100">
+                    Throw Comparison
+                  </h2>
+                  <RadarChart labels={radarLabels} dataValues={radarDataValues} />
+                </div>
+              </>
+            )}
+
+            {activeTab === 'defensive' && (
+              <CategorySection
+                title="Defensive Skills"
+                skills={getCategoryData(selectedAthlete).defensive}
+                player={selectedAthlete.skills}
+              />
+            )}
+
+            {activeTab === 'mental' && (
+              <CategorySection
+                title="Mental & Recovery"
+                skills={getCategoryData(selectedAthlete).mental}
+                player={selectedAthlete.skills}
+              />
+            )}
+
+            {/* Roadmap Modal */}
+            <RoadmapModal
+              isOpen={isRoadmapOpen}
+              onClose={() => setRoadmapOpen(false)}
+              player={selectedAthlete}
             />
-            {/* Example: A Throw Comparison Radar Chart */}
-            <div className="mt-6">
-              <h2 className="text-xl font-semibold mb-2 text-gray-100">
-                Throw Comparison
-              </h2>
-              <RadarChart labels={radarLabels} dataValues={radarDataValues} />
-            </div>
+            <FloatingActionButton onClick={() => setRoadmapOpen(true)} />
           </>
         )}
-
-        {/** DEFENSIVE */}
-        {activeTab === 'defensive' && (
-          <CategorySection
-            title="Defensive Skills"
-            skills={getCategoryData(selectedAthlete).defensive}
-            player={selectedAthlete.skills}
-          />
-        )}
-
-        {/** MENTAL */}
-        {activeTab === 'mental' && (
-          <CategorySection
-            title="Mental & Recovery"
-            skills={getCategoryData(selectedAthlete).mental}
-            player={selectedAthlete.skills}
-          />
-        )}
-
-        {/* Roadmap Modal */}
-        <RoadmapModal 
-        isOpen={isRoadmapOpen}
-        onClose={() => setRoadmapOpen(false)}
-        player={selectedAthlete}
-      />
-          <FloatingActionButton onClick={() => setRoadmapOpen(true)} />
-    
-    <RoadmapModal 
-      isOpen={isRoadmapOpen}
-      onClose={() => setRoadmapOpen(false)}
-      player={selectedAthlete}
-    />
       </div>
     </div>
   );
 }
 
 export default Dashboard;
-
-
-File: src\data\mockData.js
-================================================================================
-
-// src/data/mockData.js
-
-const mockData = [
-  {
-    id: 1, // Unique identifier for each athlete
-    metadata: {
-      name: "Chris Doehring",
-      email: "doehring@umich.edu",
-      ip: "2600:387:15:4510::6",
-      user_agent: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_6_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.6 Mobile/15E148 Safari/604.1",
-      referrer: "https://ultimate-assessment.netlify.app/",
-      created_at: "2025-01-09T14:18:32.150Z",
-    },
-    growth_targets: [
-      'change_of_direction',
-      'defensive_pattern_recognition',
-      'decision_making_vision'
-    ],
-    skills: {
-      speed_explosiveness: 7,
-      endurance: 8,
-      vertical_leap: 3,
-      change_of_direction: 6,
-      boxing_out: 6,
-      laying_out: 6,
-      recovery: 7,
-      flexibility_mobility: 5,
-      injury_prevention: 7,
-      defensive_strategy: 7,
-      offensive_strategy: 8,
-      mental_game: 9,
-      feedback_implementation: 8,
-      isolation_cutting: 6,
-      continuation_cutting: 8,
-      angles: 7,
-      fakes_footwork: 5,
-      timing_field_vision: 7,
-      decisiveness: 7,
-      catching: 9,
-      zone_offense: 7,
-      reading_the_disc: 7,
-      normal_marking: 6,
-      sideline_trap_marking: 7,
-      downfield_defending: 4,
-      handler_defending: 7,
-      defensive_pattern_recognition: 6,
-      help_defense: 6,
-      switching_on_defense: 7,
-      zone_defense: 7,
-      defensive_mental_fortitude: 8,
-      handler_movement: 8,
-      poise_with_disc: 9,
-      breaking_the_mark: 8,
-      resetting_from_trap_sideline: 8,
-      decision_making_vision: 8,
-      flow_awareness: 8,
-      throw_and_go: 7,
-      offensive_pattern_recognition: 8,
-      backhand_power: 8,
-      backhand_accuracy: 7,
-      backhand_quick_release: 7,
-      backhand_release_variations: 7,
-      backhand_against_wind: 8,
-      backhand_against_difficult_marks: 7,
-      backhand_tempo_control: 8,
-      forehand_power: 4,
-      forehand_accuracy: 5,
-      forehand_quick_release: 7,
-      forehand_release_variations: 5,
-      forehand_against_wind: 4,
-      forehand_against_difficult_marks: 9,
-      forehand_tempo_control: 7,
-      specialty_power: 4,
-      specialty_accuracy: 8,
-      specialty_quick_release: 7,
-      specialty_release_variations: 5,
-      specialty_against_wind: 4,
-      specialty_against_difficult_marks: 5,
-      specialty_tempo_control: 6,
-      hucking_confidence: 7,
-      hucking_shape_control: 7,
-      hucking_tempo_control: 8,
-      hucking_placement: 7,
-    },
-  },
-  {
-    id: 2,
-    metadata: {
-      name: "Rachel Graber",
-      email: "rachelgraber16@gmail.com",
-      ip: "104.36.4.125",
-      user_agent: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_1_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.1.1 Mobile/15E148 Safari/605.1.15 (Ecosia ios@10.5.2.2065)",
-      referrer: "https://ultimate-assessment.netlify.app/",
-      created_at: "2025-01-09T14:13:29.628Z",
-    },
-    growth_targets: [
-      'defensive_pattern_recognition',
-      'breaking_the_mark',
-      'hucking_confidence'
-    ],
-    skills: {
-      speed_explosiveness: 7,
-      endurance: 7,
-      vertical_leap: 4,
-      change_of_direction: 8,
-      boxing_out: 6,
-      laying_out: 7,
-      recovery: 8,
-      flexibility_mobility: 9,
-      injury_prevention: 8,
-      defensive_strategy: 8,
-      offensive_strategy: 5,
-      mental_game: 7,
-      feedback_implementation: 8,
-      isolation_cutting: 5,
-      continuation_cutting: 7,
-      angles: 6,
-      fakes_footwork: 7,
-      timing_field_vision: 7,
-      decisiveness: 4,
-      catching: 7,
-      zone_offense: 6,
-      reading_the_disc: 6,
-      normal_marking: 7,
-      sideline_trap_marking: 7,
-      downfield_defending: 7,
-      handler_defending: 8,
-      defensive_pattern_recognition: 6,
-      help_defense: 6,
-      switching_on_defense: 6,
-      zone_defense: 8,
-      defensive_mental_fortitude: 4,
-      handler_movement: 6,
-      poise_with_disc: 6,
-      breaking_the_mark: 4,
-      resetting_from_trap_sideline: 6,
-      decision_making_vision: 5,
-      flow_awareness: 5,
-      throw_and_go: 6,
-      offensive_pattern_recognition: 5,
-      backhand_power: 8,
-      backhand_accuracy: 7,
-      backhand_quick_release: 5,
-      backhand_release_variations: 5,
-      backhand_against_wind: 4,
-      backhand_against_difficult_marks: 5,
-      backhand_tempo_control: 5,
-      forehand_power: 7,
-      forehand_accuracy: 7,
-      forehand_quick_release: 5,
-      forehand_release_variations: 6,
-      forehand_against_wind: 3,
-      forehand_against_difficult_marks: 7,
-      forehand_tempo_control: 6,
-      specialty_power: 3,
-      specialty_accuracy: 3,
-      specialty_quick_release: 3,
-      specialty_release_variations: 3,
-      specialty_against_wind: 1,
-      specialty_against_difficult_marks: 3,
-      specialty_tempo_control: 2,
-      hucking_confidence: 7,
-      hucking_shape_control: 7,
-      hucking_tempo_control: 6,
-      hucking_placement: 6,
-    },
-  },
-  {
-    id: 3,
-    metadata: {
-      name: "Charlie Vukovic",
-      email: "cavukovic@gmail.com",
-      ip: "68.109.206.199",
-      user_agent: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_1_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/131.0.6778.154 Mobile/15E148 Safari/604.1",
-      referrer: "https://ultimate-assessment.netlify.app/",
-      created_at: "2025-01-07T22:04:37.985Z",
-    },
-    growth_targets: [
-      'speed_explosiveness',
-      'defensive_mental_fortitude',
-      'continuation_cutting'
-    ],
-    skills: {
-      speed_explosiveness: 6,
-      endurance: 8,
-      vertical_leap: 7,
-      change_of_direction: 6,
-      boxing_out: 8,
-      laying_out: 4,
-      recovery: 5,
-      flexibility_mobility: 6,
-      injury_prevention: 6,
-      defensive_strategy: 8,
-      offensive_strategy: 6,
-      mental_game: 9,
-      feedback_implementation: 7,
-      isolation_cutting: 6,
-      continuation_cutting: 6,
-      angles: 5,
-      fakes_footwork: 5,
-      timing_field_vision: 4,
-      decisiveness: 5,
-      catching: 7,
-      zone_offense: 6,
-      reading_the_disc: 7,
-      normal_marking: 3,
-      sideline_trap_marking: 5,
-      downfield_defending: 6,
-      handler_defending: 4,
-      defensive_pattern_recognition: 7,
-      help_defense: 8,
-      switching_on_defense: 8,
-      zone_defense: 8,
-      defensive_mental_fortitude: 8,
-      handler_movement: 5,
-      poise_with_disc: 7,
-      breaking_the_mark: 8,
-      resetting_from_trap_sideline: 8,
-      decision_making_vision: 4,
-      flow_awareness: 5,
-      throw_and_go: 5,
-      offensive_pattern_recognition: 5,
-      backhand_power: 9,
-      backhand_accuracy: 7,
-      backhand_quick_release: 6,
-      backhand_release_variations: 6,
-      backhand_against_wind: 8,
-      backhand_against_difficult_marks: 6,
-      backhand_tempo_control: 5,
-      forehand_power: 7,
-      forehand_accuracy: 7,
-      forehand_quick_release: 7,
-      forehand_release_variations: 7,
-      forehand_against_wind: 6,
-      forehand_against_difficult_marks: 7,
-      forehand_tempo_control: 7,
-      specialty_power: 7,
-      specialty_accuracy: 6,
-      specialty_quick_release: 6,
-      specialty_release_variations: 6,
-      specialty_against_wind: 4,
-      specialty_against_difficult_marks: 6,
-      specialty_tempo_control: 4,
-      hucking_confidence: 7,
-      hucking_shape_control: 6,
-      hucking_tempo_control: 6,
-      hucking_placement: 6,
-    },
-  },
-  {
-    id: 4,
-    metadata: {
-      name: "Mark Whitton",
-      email: "whittonm@mail.gvsu.edu",
-      ip: "2601:405:4700:1db0:411b:5a4c:ddba:1afb",
-      user_agent: "Mozilla/5.0 (iPhone; CPU iPhone OS 16_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.2 Mobile/15E148 Safari/604.1",
-      referrer: "https://ultimate-assessment.netlify.app/",
-      created_at: "2025-01-07T02:07:01.581Z",
-    },
-    growth_targets: [
-      'breaking_the_mark',
-      'endurance',
-      'handler_movement'
-    ],
-    skills: {
-      speed_explosiveness: 7,
-      endurance: 6,
-      vertical_leap: 7,
-      change_of_direction: 5,
-      boxing_out: 5,
-      laying_out: 7,
-      recovery: 4,
-      flexibility_mobility: 6,
-      injury_prevention: 6,
-      defensive_strategy: 8,
-      offensive_strategy: 7,
-      mental_game: 6,
-      feedback_implementation: 6,
-      isolation_cutting: 5,
-      continuation_cutting: 6,
-      angles: 6,
-      fakes_footwork: 3,
-      timing_field_vision: 7,
-      decisiveness: 3,
-      catching: 9,
-      zone_offense: 5,
-      reading_the_disc: 7,
-      normal_marking: 6,
-      sideline_trap_marking: 8,
-      downfield_defending: 6,
-      handler_defending: 4,
-      defensive_pattern_recognition: 6,
-      help_defense: 7,
-      switching_on_defense: 8,
-      zone_defense: 7,
-      defensive_mental_fortitude: 7,
-      handler_movement: 5,
-      poise_with_disc: 7,
-      breaking_the_mark: 4,
-      resetting_from_trap_sideline: 7,
-      decision_making_vision: 4,
-      flow_awareness: 6,
-      throw_and_go: 5,
-      offensive_pattern_recognition: 5,
-      backhand_power: 8,
-      backhand_accuracy: 7,
-      backhand_quick_release: 5,
-      backhand_release_variations: 6,
-      backhand_against_wind: 9,
-      backhand_against_difficult_marks: 6,
-      backhand_tempo_control: 7,
-      forehand_power: 9,
-      forehand_accuracy: 8,
-      forehand_quick_release: 6,
-      forehand_release_variations: 6,
-      forehand_against_wind: 8,
-      forehand_against_difficult_marks: 7,
-      forehand_tempo_control: 8,
-      specialty_power: 7,
-      specialty_accuracy: 7,
-      specialty_quick_release: 6,
-      specialty_release_variations: 7,
-      specialty_against_wind: 6,
-      specialty_against_difficult_marks: 6,
-      specialty_tempo_control: 6,
-      hucking_confidence: 9,
-      hucking_shape_control: 8,
-      hucking_tempo_control: 8,
-      hucking_placement: 8,
-    },
-  },
-  {
-    id: 5,
-    metadata: {
-      name: "Rachel Mast",
-      email: "rachelgerb520@gmail.com",
-      ip: "50.126.208.197",
-      user_agent: "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36",
-      referrer: "https://ultimate-assessment.netlify.app/",
-      created_at: "2025-01-07T01:55:25.039Z",
-    },
-    growth_targets: [
-      'hucking_confidence',
-      'handler_movement',
-      'breaking_the_mark'
-    ],
-    skills: {
-      speed_explosiveness: 8,
-      endurance: 8,
-      vertical_leap: 7,
-      change_of_direction: 8,
-      boxing_out: 7,
-      laying_out: 7,
-      recovery: 10,
-      flexibility_mobility: 8,
-      injury_prevention: 9,
-      defensive_strategy: 7,
-      offensive_strategy: 7,
-      mental_game: 9,
-      feedback_implementation: 9,
-      isolation_cutting: 9,
-      continuation_cutting: 9,
-      angles: 9,
-      fakes_footwork: 7,
-      timing_field_vision: 8,
-      decisiveness: 8,
-      catching: 9,
-      zone_offense: 8,
-      reading_the_disc: 8,
-      normal_marking: 8,
-      sideline_trap_marking: 8,
-      downfield_defending: 8,
-      handler_defending: 8,
-      defensive_pattern_recognition: 6,
-      help_defense: 8,
-      switching_on_defense: 8,
-      zone_defense: 7,
-      defensive_mental_fortitude: 7,
-      handler_movement: 7,
-      poise_with_disc: 6,
-      breaking_the_mark: 6,
-      resetting_from_trap_sideline: 7,
-      decision_making_vision: 8,
-      flow_awareness: 8,
-      throw_and_go: 8,
-      offensive_pattern_recognition: 5,
-      backhand_power: 2,
-      backhand_accuracy: 7,
-      backhand_quick_release: 8,
-      backhand_release_variations: 6,
-      backhand_against_wind: 5,
-      backhand_against_difficult_marks: 6,
-      backhand_tempo_control: 6,
-      forehand_power: 2,
-      forehand_accuracy: 6,
-      forehand_quick_release: 5,
-      forehand_release_variations: 5,
-      forehand_against_wind: 1,
-      forehand_against_difficult_marks: 5,
-      forehand_tempo_control: 5,
-      specialty_power: 1,
-      specialty_accuracy: 1,
-      specialty_quick_release: 1,
-      specialty_release_variations: 1,
-      specialty_against_wind: 1,
-      specialty_against_difficult_marks: 1,
-      specialty_tempo_control: 1,
-      hucking_confidence: 2,
-      hucking_shape_control: 2,
-      hucking_tempo_control: 2,
-      hucking_placement: 2,
-    },
-  },
-  {
-    id: 6,
-    metadata: {
-      name: "Anson Reppermund",
-      email: "reprimand1000@gmail.com",
-      ip: "108.39.240.253",
-      user_agent: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_1_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.1.1 Mobile/15E148 Safari/604.1",
-      referrer: "https://ultimate-assessment.netlify.app/",
-      created_at: "2025-01-06T23:35:25.293Z",
-    },
-    growth_targets: [
-      'injury_prevention',
-      'breaking_the_mark',
-      'decisiveness'
-    ],
-    skills: {
-      speed_explosiveness: 9,
-      endurance: 5,
-      vertical_leap: 9,
-      change_of_direction: 4,
-      boxing_out: 7,
-      laying_out: 3,
-      recovery: 7,
-      flexibility_mobility: 4,
-      injury_prevention: 4,
-      defensive_strategy: 9,
-      offensive_strategy: 7,
-      mental_game: 8,
-      feedback_implementation: 6,
-      isolation_cutting: 6,
-      continuation_cutting: 5,
-      angles: 8,
-      fakes_footwork: 4,
-      timing_field_vision: 7,
-      decisiveness: 5,
-      catching: 6,
-      zone_offense: 7,
-      reading_the_disc: 9,
-      normal_marking: 5,
-      sideline_trap_marking: 8,
-      downfield_defending: 10,
-      handler_defending: 3,
-      defensive_pattern_recognition: 10,
-      help_defense: 10,
-      switching_on_defense: 9,
-      zone_defense: 8,
-      defensive_mental_fortitude: 7,
-      handler_movement: 8,
-      poise_with_disc: 6,
-      breaking_the_mark: 4,
-      resetting_from_trap_sideline: 7,
-      decision_making_vision: 7,
-      flow_awareness: 6,
-      throw_and_go: 5,
-      offensive_pattern_recognition: 5,
-      backhand_power: 8,
-      backhand_accuracy: 5,
-      backhand_quick_release: 8,
-      backhand_release_variations: 7,
-      backhand_against_wind: 7,
-      backhand_against_difficult_marks: 3,
-      backhand_tempo_control: 5,
-      forehand_power: 5,
-      forehand_accuracy: 6,
-      forehand_quick_release: 4,
-      forehand_release_variations: 4,
-      forehand_against_wind: 6,
-      forehand_against_difficult_marks: 5,
-      forehand_tempo_control: 5,
-      specialty_power: 6,
-      specialty_accuracy: 5,
-      specialty_quick_release: 5,
-      specialty_release_variations: 7,
-      specialty_against_wind: 3,
-      specialty_against_difficult_marks: 6,
-      specialty_tempo_control: 5,
-      hucking_confidence: 5,
-      hucking_shape_control: 6,
-      hucking_tempo_control: 5,
-      hucking_placement: 6,
-    },
-  },
-  {
-    id: 7,
-    metadata: {
-      name: "Jonathan Mast",
-      email: "jon1mast@gmail.com",
-      ip: "50.126.208.197",
-      user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0",
-      referrer: "https://ultimate-assessment.netlify.app/",
-      created_at: "2025-01-06T23:28:51.361Z",
-    },
-    growth_targets: [
-      'endurance',
-      'speed_explosiveness',
-      'decisiveness'
-    ],
-    skills: {
-      speed_explosiveness: 4,
-      endurance: 3,
-      vertical_leap: 3,
-      change_of_direction: 5,
-      boxing_out: 7,
-      laying_out: 1,
-      recovery: 6,
-      flexibility_mobility: 7,
-      injury_prevention: 4,
-      defensive_strategy: 7,
-      offensive_strategy: 9,
-      mental_game: 9,
-      feedback_implementation: 10,
-      isolation_cutting: 3,
-      continuation_cutting: 4,
-      angles: 6,
-      fakes_footwork: 5,
-      timing_field_vision: 6,
-      decisiveness: 5,
-      catching: 9,
-      zone_offense: 8,
-      reading_the_disc: 9,
-      normal_marking: 8,
-      sideline_trap_marking: 9,
-      downfield_defending: 4,
-      handler_defending: 6,
-      defensive_pattern_recognition: 6,
-      help_defense: 8,
-      switching_on_defense: 8,
-      zone_defense: 6,
-      defensive_mental_fortitude: 4,
-      handler_movement: 9,
-      poise_with_disc: 10,
-      breaking_the_mark: 9,
-      resetting_from_trap_sideline: 9,
-      decision_making_vision: 8,
-      flow_awareness: 9,
-      throw_and_go: 8,
-      offensive_pattern_recognition: 9,
-      backhand_power: 9,
-      backhand_accuracy: 9,
-      backhand_quick_release: 9,
-      backhand_release_variations: 9,
-      backhand_against_wind: 8,
-      backhand_against_difficult_marks: 9,
-      backhand_tempo_control: 9,
-      forehand_power: 8,
-      forehand_accuracy: 9,
-      forehand_quick_release: 10,
-      forehand_release_variations: 10,
-      forehand_against_wind: 8,
-      forehand_against_difficult_marks: 10,
-      forehand_tempo_control: 10,
-      specialty_power: 8,
-      specialty_accuracy: 8,
-      specialty_quick_release: 8,
-      specialty_release_variations: 10,
-      specialty_against_wind: 6,
-      specialty_against_difficult_marks: 8,
-      specialty_tempo_control: 8,
-      hucking_confidence: 7,
-      hucking_shape_control: 7,
-      hucking_tempo_control: 7,
-      hucking_placement: 9,
-    },
-  },
-  // Add more athletes as needed
-];
-
-export default mockData;
 
 
 File: src\hooks\usePreloadState.js
@@ -7709,27 +6953,36 @@ body {
 File: src\index.js
 ================================================================================
 
-// src/index.js
+/* ------------------------------------------
+   index.js (Refactored)
+------------------------------------------- */
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import './index.css';
 import App from './App.jsx';
-import { BrowserRouter } from 'react-router-dom'; // Import BrowserRouter
+import { BrowserRouter } from 'react-router-dom';
 import { registerServiceWorker } from './serviceWorkerRegistration';
 
+// Create the root container for our React app
+const rootElement = document.getElementById('root');
+const root = ReactDOM.createRoot(rootElement);
 
-const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(
   <React.StrictMode>
-    <BrowserRouter> {/* Wrap App with BrowserRouter */}
-      <div className="dark">  {/* <-- Force dark mode */}
+    <BrowserRouter>
+      {/* Force dark mode for the entire application */}
+      <div className="dark">
         <App />
       </div>
     </BrowserRouter>
   </React.StrictMode>
 );
+
+// Register the service worker for offline capabilities
 registerServiceWorker();
-if (navigator.serviceWorker.controller) {
+
+// Log service worker control status
+if (navigator.serviceWorker && navigator.serviceWorker.controller) {
   console.log('[SW] Service worker is controlling the page');
 } else {
   console.warn('[SW] Service worker is NOT controlling the page');
@@ -7754,67 +7007,120 @@ const reportWebVitals = onPerfEntry => {
 export default reportWebVitals;
 
 
+File: src\services\athleteService.js
+================================================================================
+
+// src/services/athleteService.js
+
+import { collection, getDocs, addDoc, doc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { db } from '../config/firebase';
+
+/**
+ * Fetch all athletes
+ */
+export const fetchAthletes = async () => {
+  const athletesCol = collection(db, 'athletes');
+  const athletesSnapshot = await getDocs(athletesCol);
+  const athletesList = athletesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+  return athletesList;
+};
+
+/**
+ * Add a new athlete
+ */
+export const addAthlete = async (athleteData) => {
+  const athletesCol = collection(db, 'athletes');
+  const docRef = await addDoc(athletesCol, athleteData);
+  return docRef.id;
+};
+
+/**
+ * Update an athlete
+ */
+export const updateAthlete = async (id, updatedData) => {
+  const athleteDoc = doc(db, 'athletes', id);
+  await updateDoc(athleteDoc, updatedData);
+};
+
+/**
+ * Delete an athlete
+ */
+export const deleteAthlete = async (id) => {
+  const athleteDoc = doc(db, 'athletes', id);
+  await deleteDoc(athleteDoc);
+};
+
+
 File: src\serviceWorkerRegistration.js
 ================================================================================
 
-// src/serviceWorkerRegistration.js
+/* ------------------------------------------
+   serviceWorkerRegistration.js (Refactored)
+------------------------------------------- */
 
 export function registerServiceWorker() {
-  if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-      navigator.serviceWorker.register('/service-worker.js')
-        .then((registration) => {
-          console.log('[SW] Registration successful:', registration);
-
-          // Listen for updates to the service worker.
-          registration.addEventListener('updatefound', () => {
-            const newWorker = registration.installing;
-            console.log('[SW] New worker being installed:', newWorker);
-
-            newWorker.addEventListener('statechange', () => {
-              console.log('[SW] New worker state:', newWorker.state);
-              if (newWorker.state === 'installed') {
-                if (navigator.serviceWorker.controller) {
-                  // New update available
-                  console.log('[SW] New update available');
-                  // Optionally, notify the user about the update
-                } else {
-                  // Content cached for offline use
-                  console.log('[SW] Content cached for offline use');
-                }
-              }
-            });
-          });
-
-          // Check for controlling service worker
-          if (navigator.serviceWorker.controller) {
-            console.log('[SW] Service worker is controlling the page');
-          } else {
-            console.log('[SW] Service worker is NOT controlling the page');
-          }
-
-        })
-        .catch((error) => {
-          console.error('[SW] Service worker registration failed:', error);
-        });
-    });
-
-    // Reload the page when the service worker updates
-    let refreshing = false;
-    navigator.serviceWorker.addEventListener('controllerchange', () => {
-      if (!refreshing) {
-        refreshing = true;
-        window.location.reload();
-      }
-    });
-
-    // Handle messages from the service worker
-    navigator.serviceWorker.addEventListener('message', (event) => {
-      console.log('[SW] Received message:', event.data);
-    });
-  } else {
-    console.log('[SW] Service workers are not supported');
+  // Check if the browser supports service workers
+  if (!('serviceWorker' in navigator)) {
+    console.log('[SW] Service workers are not supported in this browser.');
+    return;
   }
+
+  // Register the service worker after the window loads
+  window.addEventListener('load', () => {
+    navigator.serviceWorker
+      .register('/service-worker.js')
+      .then((registration) => {
+        console.log('[SW] Registration successful:', registration);
+
+        // Listen for updates to the service worker
+        registration.addEventListener('updatefound', () => {
+          const installingWorker = registration.installing;
+          console.log('[SW] New worker installing:', installingWorker);
+
+          // Track the state of the new worker
+          installingWorker.addEventListener('statechange', () => {
+            console.log('[SW] New worker state:', installingWorker.state);
+
+            if (installingWorker.state === 'installed') {
+              if (navigator.serviceWorker.controller) {
+                // There's an existing SW, so this is an update
+                console.log('[SW] New update available');
+                // Optionally, display a notification or UI prompt to the user
+              } else {
+                // First SW install: content is now cached for offline use
+                console.log('[SW] Content cached for offline use');
+              }
+            }
+          });
+        });
+
+        // Check if the SW is already controlling the page
+        if (navigator.serviceWorker.controller) {
+          console.log('[SW] Service worker is controlling the page');
+        } else {
+          console.log('[SW] Service worker is NOT controlling the page');
+        }
+      })
+      .catch((error) => {
+        console.error('[SW] Service worker registration failed:', error);
+      });
+  });
+
+  // Reload the page when the service worker updates to the new version
+  let refreshing = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!refreshing) {
+      refreshing = true;
+      // Reload the page to allow the new service worker to control
+      window.location.reload();
+    }
+  });
+
+  // Listen for messages from the service worker
+  navigator.serviceWorker.addEventListener('message', (event) => {
+    console.log('[SW] Received message from service worker:', event.data);
+    // For example, handle 'CACHE_UPDATED' messages or other custom events
+  });
 }
 
 
