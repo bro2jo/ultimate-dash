@@ -1,6 +1,6 @@
 Project: performance-app
 Version: 0.1.0
-Generated: 2025-01-15T15:13:23.013Z
+Generated: 2025-01-19T22:09:04.412Z
 ================================================================================
 
 File: concat-files.js
@@ -159,9 +159,14 @@ File: package.json
     ]
   },
   "devDependencies": {
+    "@types/jest": "^29.5.14",
+    "@types/node": "^22.10.7",
+    "@types/react": "^19.0.7",
+    "@types/react-dom": "^19.0.3",
     "autoprefixer": "^10.4.20",
     "postcss": "^8.4.49",
-    "tailwindcss": "^3.4.17"
+    "tailwindcss": "^3.4.17",
+    "typescript": "^5.7.3"
   }
 }
 
@@ -763,38 +768,109 @@ File: src\App.css
 }
 
 
-File: src\App.jsx
+File: src\App.tsx
 ================================================================================
 
-import { lazy, Suspense } from 'react';
+// src/App.tsx
+import { lazy, ReactElement, Suspense } from 'react';
 import { Routes, Route } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import { LoadingState } from './components/LoadingState';
+import ErrorBoundary from './components/ErrorBoundary';
+import ErrorFallback from './components/ErrorFallback';
+import { lazyLoad } from './utils/lazyLoad';
 
+// Define route configuration type
+interface RouteConfig {
+  readonly path: string;
+  readonly element: ReactElement;
+  readonly componentName: string;
+}
 
-// Lazy load components
-const LoginPage = lazy(() => import('./components/auth/LoginPage'));
-const Dashboard = lazy(() => import('./Dashboard'));
-const ProtectedRoute = lazy(() => import('./components/auth/ProtectedRoute'));
+// Define routes object with type safety
+const ROUTES = {
+  LOGIN: '/login',
+  HOME: '/*'
+} as const;
 
-function App() {
+// Lazy load components with error handling
+const LoginPage = lazyLoad(
+  () => import('./components/auth/LoginPage'),
+  { retry: 2, retryDelay: 1000 }
+);
+
+const Dashboard = lazyLoad(
+  () => import('./Dashboard'),
+  { retry: 2 }
+);
+
+const ProtectedRoute = lazyLoad(
+  () => import('./components/auth/ProtectedRoute'),
+  { retry: 2 }
+);
+
+// Define route configurations with component names
+const routeConfig: RouteConfig[] = [
+  {
+    path: ROUTES.LOGIN,
+    element: <LoginPage />,
+    componentName: 'LoginPage'
+  },
+  {
+    path: ROUTES.HOME,
+    element: (
+      <ProtectedRoute>
+        <Dashboard />
+      </ProtectedRoute>
+    ),
+    componentName: 'Dashboard'
+  }
+];
+
+// Create a wrapper for suspense with error handling
+const SuspenseWithErrorBoundary: React.FC<{
+  children: React.ReactNode;
+  name: string;
+}> = ({ children, name }) => (
+  <ErrorBoundary
+    fallback={
+      <ErrorFallback 
+        error={new Error(`Failed to load ${name}. Please try refreshing the page.`)}
+        resetErrorBoundary={() => window.location.reload()}
+      />
+    }
+  >
+    <Suspense fallback={<LoadingState />}>
+      {children}
+    </Suspense>
+  </ErrorBoundary>
+);
+
+function App(): ReactElement {
   return (
-    <AuthProvider>
-      {/* Single Suspense boundary at the root */}
-      <Suspense fallback={<LoadingState />}>
+    <ErrorBoundary
+      fallback={
+        <ErrorFallback 
+          resetErrorBoundary={() => window.location.reload()}
+        />
+      }
+    >
+      <AuthProvider>
         <Routes>
-          <Route path="/login" element={<LoginPage />} />
-          <Route
-            path="/*"
-            element={
-              <ProtectedRoute>
-                <Dashboard />
-              </ProtectedRoute>
-            }
-          />
+          {routeConfig.map(({ path, element, componentName }) => (
+            <Route
+              key={path}
+              path={path}
+              element={
+                <SuspenseWithErrorBoundary name={componentName}>
+                  {element}
+                </SuspenseWithErrorBoundary>
+              }
+            />
+          ))}
         </Routes>
-      </Suspense>
-    </AuthProvider>
+      </AuthProvider>
+    </ErrorBoundary>
   );
 }
 
@@ -1276,6 +1352,100 @@ const CategorySection = ({ title, skills, player }) => {
 export default CategorySection;
 
 
+File: src\components\ErrorBoundary.tsx
+================================================================================
+
+// src/components/ErrorBoundary.tsx
+import React, { Component, ErrorInfo, ReactNode } from 'react';
+import ErrorFallback from './ErrorFallback';
+
+interface Props {
+  children: ReactNode;
+  fallback?: ReactNode;
+  onError?: (error: Error, errorInfo: ErrorInfo) => void;
+}
+
+interface State {
+  hasError: boolean;
+  error?: Error;
+}
+
+class ErrorBoundary extends Component<Props, State> {
+  public state: State = {
+    hasError: false,
+  };
+
+  public static getDerivedStateFromError(error: Error): State {
+    return { hasError: true, error };
+  }
+
+  public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    console.error('Error caught by error boundary:', error, errorInfo);
+    this.props.onError?.(error, errorInfo);
+  }
+
+  private handleReset = () => {
+    this.setState({ hasError: false, error: undefined });
+  };
+
+  public render() {
+    if (this.state.hasError) {
+      if (this.props.fallback) {
+        return this.props.fallback;
+      }
+
+      return (
+        <ErrorFallback
+          error={this.state.error}
+          resetErrorBoundary={this.handleReset}
+        />
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
+export default ErrorBoundary;
+
+File: src\components\ErrorFallback.tsx
+================================================================================
+
+// src/components/ErrorFallback.tsx
+interface ErrorFallbackProps {
+    error?: Error;
+    resetErrorBoundary?: () => void;
+  }
+  
+  const ErrorFallback: React.FC<ErrorFallbackProps> = ({ 
+    error, 
+    resetErrorBoundary 
+  }) => {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-900">
+        <div className="text-center p-4 max-w-md">
+          <h1 className="text-xl text-red-500 mb-2">
+            Oops! Something went wrong
+          </h1>
+          <p className="text-gray-400 mb-4">
+            {error?.message || 'Please try again or refresh the page'}
+          </p>
+          {resetErrorBoundary && (
+            <button
+              onClick={resetErrorBoundary}
+              className="px-4 py-2 bg-emerald-500 text-white rounded-lg 
+                       hover:bg-emerald-600 transition-colors"
+            >
+              Try Again
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  };
+  
+  export default ErrorFallback;
+
 File: src\components\FirestoreTest.jsx
 ================================================================================
 
@@ -1618,26 +1788,55 @@ export const InstallPrompt = () => {
 };
 
 
-File: src\components\LoadingState.jsx
+File: src\components\LoadingState.tsx
 ================================================================================
 
-export function LoadingState({ size = 'h-16 w-16', color = 'emerald-500', text = 'Loading...' }) {
+// export function LoadingState({ size = 'h-16 w-16', color = 'emerald-500', text = 'Loading...' }) {
+//   return (
+//     <div className="fixed inset-0 flex items-center justify-center bg-gray-900 bg-opacity-75 z-50">
+//       <div className="flex flex-col items-center gap-4">
+//         {/* Loading Spinner */}
+//         <div
+//           className={`animate-spin rounded-full ${size} border-t-4 border-b-4 border-${color}`}
+//           role="status"
+//           aria-label="Loading"
+//         />
+//         {/* Loading Text */}
+//         <div className="text-gray-300 text-lg">{text}</div>
+//       </div>
+//     </div>
+//   );
+// }
+
+// src/components/LoadingState.tsx
+interface LoadingStateProps {
+  size?: string;
+  color?: string;
+  text?: string;
+}
+
+const defaultProps = {
+  size: 'h-16 w-16',
+  color: 'emerald-500',
+  text: 'Loading...'
+};
+
+export const LoadingState: React.FC<LoadingStateProps> = (props) => {
+  const { size, color, text } = { ...defaultProps, ...props };
+
   return (
     <div className="fixed inset-0 flex items-center justify-center bg-gray-900 bg-opacity-75 z-50">
       <div className="flex flex-col items-center gap-4">
-        {/* Loading Spinner */}
         <div
-          className={`animate-spin rounded-full ${size} border-t-4 border-b-4 border-${color}`}
+          className={`animate-spin rounded-full border-t-4 border-b-4 border-${color} ${size}`}
           role="status"
           aria-label="Loading"
         />
-        {/* Loading Text */}
-        <div className="text-gray-300 text-lg">{text}</div>
+        {text && <div className="text-gray-300 text-lg">{text}</div>}
       </div>
     </div>
   );
-}
-
+};
 
 File: src\components\MiniRadial.jsx
 ================================================================================
@@ -2685,6 +2884,64 @@ const RoadmapModal = ({ isOpen, onClose, player }) => (
 
 export default RoadmapModal;
 
+File: src\components\RootErrorBoundary.tsx
+================================================================================
+
+// src/components/RootErrorBoundary.tsx
+import React, { Component, ErrorInfo, ReactNode } from 'react';
+import ErrorFallback from './ErrorFallback';
+
+interface Props {
+  children: ReactNode;
+}
+
+interface State {
+  hasError: boolean;
+  error?: Error;
+  errorInfo?: ErrorInfo;
+}
+
+class RootErrorBoundary extends Component<Props, State> {
+  public state: State = {
+    hasError: false
+  };
+
+  public static getDerivedStateFromError(error: Error): State {
+    return { hasError: true, error };
+  }
+
+  public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    // Log error to your error reporting service
+    console.error('Root level error:', error);
+    console.error('Error info:', errorInfo);
+    
+    this.setState({
+      errorInfo
+    });
+  }
+
+  private handleReset = () => {
+    // Reset error state and reload app
+    this.setState({ hasError: false, error: undefined, errorInfo: undefined });
+    window.location.reload();
+  };
+
+  public render() {
+    if (this.state.hasError) {
+      return (
+        <ErrorFallback
+          error={this.state.error}
+          resetErrorBoundary={this.handleReset}
+        />
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
+export default RootErrorBoundary;
+
 File: src\components\SkillCard.jsx
 ================================================================================
 
@@ -3119,65 +3376,142 @@ function ThrowingSection({ throwingData, player }) {
 export default ThrowingSection;
 
 
-File: src\config\firebase.js
+File: src\config\env.ts
 ================================================================================
 
-// src/config/firebase.js
+// src/config/env.ts
+import { EnvironmentVariables } from '../types/environment';
 
-import { initializeApp } from "firebase/app";
-import { getAnalytics } from "firebase/analytics";
-import { getAuth } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
+const requiredEnvVars = [
+  'REACT_APP_FIREBASE_API_KEY',
+  'REACT_APP_FIREBASE_AUTH_DOMAIN',
+  'REACT_APP_FIREBASE_PROJECT_ID',
+  'REACT_APP_FIREBASE_STORAGE_BUCKET',
+  'REACT_APP_FIREBASE_MESSAGING_SENDER_ID',
+  'REACT_APP_FIREBASE_APP_ID',
+] as const;
 
-// Your Firebase configuration object
-const firebaseConfig = {
-  apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
-  authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN,
-  projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID,
-  storageBucket: process.env.REACT_APP_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID,
-  appId: process.env.REACT_APP_FIREBASE_APP_ID,
-  measurementId: process.env.REACT_APP_FIREBASE_MEASUREMENT_ID
+const validateEnv = (): void => {
+  for (const envVar of requiredEnvVars) {
+    if (!process.env[envVar]) {
+      throw new Error(`Missing required environment variable: ${envVar}`);
+    }
+  }
 };
 
-// Initialize Firebase App, Auth, Firestore, and Analytics
-let app = null;
-let analytics = null;
-let auth = null;
-let db = null;
+export const getEnvConfig = (): Readonly<EnvironmentVariables> => {
+  validateEnv();
+
+  return {
+    NODE_ENV: process.env.NODE_ENV || 'development',
+    REACT_APP_FIREBASE_API_KEY: process.env.REACT_APP_FIREBASE_API_KEY!,
+    REACT_APP_FIREBASE_AUTH_DOMAIN: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN!,
+    REACT_APP_FIREBASE_PROJECT_ID: process.env.REACT_APP_FIREBASE_PROJECT_ID!,
+    REACT_APP_FIREBASE_STORAGE_BUCKET: process.env.REACT_APP_FIREBASE_STORAGE_BUCKET!,
+    REACT_APP_FIREBASE_MESSAGING_SENDER_ID: process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID!,
+    REACT_APP_FIREBASE_APP_ID: process.env.REACT_APP_FIREBASE_APP_ID!,
+    REACT_APP_FIREBASE_MEASUREMENT_ID: process.env.REACT_APP_FIREBASE_MEASUREMENT_ID || '',
+    PUBLIC_URL: process.env.PUBLIC_URL || '',
+  } as const;
+};
+
+File: src\config\firebase.ts
+================================================================================
+
+// src/config/firebase.ts
+import { initializeApp, FirebaseApp } from "firebase/app";
+import { Analytics, getAnalytics } from "firebase/analytics";
+import { Auth, getAuth } from "firebase/auth";
+import { Firestore, getFirestore } from "firebase/firestore";
+import { getEnvConfig } from './env';
+
+// Firebase instance type definitions
+interface FirebaseInstances {
+  app: FirebaseApp | null;
+  analytics: Analytics | null;
+  auth: Auth | null;
+  db: Firestore | null;
+}
+
+// Create a singleton instances object
+const instances: FirebaseInstances = {
+  app: null,
+  analytics: null,
+  auth: null,
+  db: null
+};
+
+// Get environment variables
+const env = getEnvConfig();
+
+// Firebase configuration with environment variables
+const firebaseConfig = {
+  apiKey: env.REACT_APP_FIREBASE_API_KEY,
+  authDomain: env.REACT_APP_FIREBASE_AUTH_DOMAIN,
+  projectId: env.REACT_APP_FIREBASE_PROJECT_ID,
+  storageBucket: env.REACT_APP_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID,
+  appId: env.REACT_APP_FIREBASE_APP_ID,
+  measurementId: env.REACT_APP_FIREBASE_MEASUREMENT_ID
+};
 
 /**
  * Initializes Firebase services.
  * Ensures that Firebase is initialized only once.
  * 
  * @returns {FirebaseApp} The initialized Firebase app instance.
+ * @throws {Error} If initialization fails
  */
-export const initializeFirebase = () => {
-  if (!app) {
-    // Initialize Firebase App
-    app = initializeApp(firebaseConfig);
-    
-    // Initialize Firebase Authentication
-    auth = getAuth(app);
-    
-    // Initialize Firestore
-    db = getFirestore(app);
-    
-    // Defer Analytics initialization by 2 seconds
-    setTimeout(() => {
-      analytics = getAnalytics(app);
-    }, 2000);
-    
+export const initializeFirebase = (): FirebaseApp => {
+  try {
+    if (!instances.app) {
+      // Initialize Firebase App
+      instances.app = initializeApp(firebaseConfig);
+      
+      // Initialize Firebase Authentication
+      instances.auth = getAuth(instances.app);
+      
+      // Initialize Firestore
+      instances.db = getFirestore(instances.app);
+      
+      // Defer Analytics initialization
+      if (typeof window !== 'undefined' && env.NODE_ENV === 'production') {
+        setTimeout(() => {
+          try {
+            instances.analytics = getAnalytics(instances.app!);
+          } catch (error) {
+            console.warn('Analytics initialization failed:', error);
+          }
+        }, 2000);
+      }
+    }
+
+    return instances.app;
+  } catch (error) {
+    console.error('Firebase initialization failed:', error);
+    throw error;
   }
-  return app;
 };
 
-// Immediately initialize Firebase when this module is imported
+// Initialize Firebase immediately
 initializeFirebase();
 
-// Export Firebase services for use in other parts of your application
-export { app, auth, db };
+// Export Firebase services with type safety
+export const getFirebaseInstances = () => {
+  if (!instances.app) {
+    throw new Error('Firebase has not been initialized. Call initializeFirebase first.');
+  }
+  
+  return {
+    app: instances.app,
+    auth: instances.auth!,
+    db: instances.db!,
+    analytics: instances.analytics
+  };
+};
 
+// Export individual services for backward compatibility
+export const { app, auth, db } = getFirebaseInstances();
 
 File: src\contexts\AuthContext.js
 ================================================================================
@@ -3654,43 +3988,63 @@ body {
 }
 
 
-File: src\index.js
+File: src\index.tsx
 ================================================================================
 
-/* ------------------------------------------
-   index.js (Refactored)
-------------------------------------------- */
+// src/index.tsx
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import './index.css';
-import App from './App.jsx';
+import App from './App';
 import { BrowserRouter } from 'react-router-dom';
 import { registerServiceWorker } from './serviceWorkerRegistration';
+import RootErrorBoundary from './components/RootErrorBoundary';
+import ErrorFallback from './components/ErrorFallback';
+import { getEnvConfig } from './config/env';
 
-// Create the root container for our React app
-const rootElement = document.getElementById('root');
-const root = ReactDOM.createRoot(rootElement);
+const initializeApp = () => {
+  try {
+    // Validate environment variables
+    getEnvConfig();
+    
+    const rootElement = document.getElementById('root');
+    if (!rootElement) throw new Error('Failed to find the root element');
+    
+    const root = ReactDOM.createRoot(rootElement);
 
-root.render(
-  <React.StrictMode>
-    <BrowserRouter>
-      {/* Force dark mode for the entire application */}
-      <div className="dark">
-        <App />
-      </div>
-    </BrowserRouter>
-  </React.StrictMode>
-);
+    root.render(
+      <React.StrictMode>
+        <RootErrorBoundary>
+          <BrowserRouter>
+            <div className="dark">
+              <App />
+            </div>
+          </BrowserRouter>
+        </RootErrorBoundary>
+      </React.StrictMode>
+    );
 
-// Register the service worker for offline capabilities
-registerServiceWorker();
+    if (process.env.NODE_ENV === 'production') {
+      registerServiceWorker();
+    }
+  } catch (error) {
+    // Handle initialization errors
+    console.error('Failed to initialize app:', error);
+    
+    const rootElement = document.getElementById('root');
+    if (rootElement) {
+      const root = ReactDOM.createRoot(rootElement);
+      root.render(
+        <ErrorFallback 
+          error={error as Error}
+          resetErrorBoundary={() => window.location.reload()} 
+        />
+      );
+    }
+  }
+};
 
-// Log service worker control status
-if (navigator.serviceWorker && navigator.serviceWorker.controller) {
-} else {
-  console.warn('[SW] Service worker is NOT controlling the page');
-}
-
+initializeApp();
 
 File: src\reportWebVitals.js
 ================================================================================
@@ -3832,6 +4186,52 @@ File: src\setupTests.js
 // learn more: https://github.com/testing-library/jest-dom
 import '@testing-library/jest-dom';
 
+
+File: src\types\components.d.ts
+================================================================================
+
+// src/types/components.d.ts
+
+export interface LoadingStateProps {
+    size?: string;
+    color?: string;
+    text?: string;
+  }
+  
+  export interface ErrorBoundaryProps {
+    children: React.ReactNode;
+    fallback: React.ReactElement;
+  }
+  
+  export interface AuthProviderProps {
+    children: React.ReactNode;
+  }
+  
+  export interface ProtectedRouteProps {
+    children: React.ReactNode;
+  }
+
+File: src\types\environment.d.ts
+================================================================================
+
+// src/types/environment.d.ts
+export interface EnvironmentVariables {
+    readonly NODE_ENV: 'development' | 'production' | 'test';
+    readonly REACT_APP_FIREBASE_API_KEY: string;
+    readonly REACT_APP_FIREBASE_AUTH_DOMAIN: string;
+    readonly REACT_APP_FIREBASE_PROJECT_ID: string;
+    readonly REACT_APP_FIREBASE_STORAGE_BUCKET: string;
+    readonly REACT_APP_FIREBASE_MESSAGING_SENDER_ID: string;
+    readonly REACT_APP_FIREBASE_APP_ID: string;
+    readonly REACT_APP_FIREBASE_MEASUREMENT_ID: string;
+    readonly PUBLIC_URL: string;
+  }
+  
+  declare global {
+    namespace NodeJS {
+      interface ProcessEnv extends EnvironmentVariables {}
+    }
+  }
 
 File: src\utils\cache.js
 ================================================================================
@@ -4015,6 +4415,39 @@ export function computeOverallScore(player) {
   }
   return count === 0 ? 0 : parseFloat((sum / count).toFixed(1));
 }
+
+
+File: src\utils\lazyLoad.ts
+================================================================================
+
+// src/utils/lazyLoad.ts
+import { lazy, ComponentType } from 'react';
+
+interface LazyLoadOptions {
+  readonly retry?: number;
+  readonly retryDelay?: number;
+}
+
+export const lazyLoad = <T extends ComponentType<any>>(
+  importPromise: () => Promise<{ default: T }>,
+  options: LazyLoadOptions = {}
+) => {
+  const { retry = 1, retryDelay = 1000 } = options;
+
+  const retryImport = (attemptsLeft: number, delay: number): Promise<{ default: T }> => {
+    return importPromise().catch((error: Error) => {
+      if (attemptsLeft <= 1) {
+        console.error('Lazy load failed after retries:', error);
+        return Promise.reject(error);
+      }
+      return new Promise((resolve) => setTimeout(resolve, delay)).then(() =>
+        retryImport(attemptsLeft - 1, delay)
+      );
+    });
+  };
+
+  return lazy(() => retryImport(retry, retryDelay));
+};
 
 
 File: src\utils\slugify.js
@@ -4093,6 +4526,31 @@ module.exports = {
   plugins: [],
 };
 
+File: tsconfig.json
+================================================================================
+
+{
+    "compilerOptions": {
+      "target": "es5",
+      "lib": ["dom", "dom.iterable", "esnext"],
+      "allowJs": true,
+      "skipLibCheck": true,
+      "esModuleInterop": true,
+      "allowSyntheticDefaultImports": true,
+      "strict": true,
+      "forceConsistentCasingInFileNames": true,
+      "module": "esnext",
+      "moduleResolution": "node",
+      "resolveJsonModule": true,
+      "isolatedModules": true,
+      "noEmit": true,
+      "jsx": "react-jsx",
+      "baseUrl": "src"
+    },
+    "include": ["src"],
+    "exclude": ["node_modules"]
+  }
+
 File: src\App.css
 ================================================================================
 
@@ -4156,38 +4614,109 @@ File: src\App.css
 }
 
 
-File: src\App.jsx
+File: src\App.tsx
 ================================================================================
 
-import { lazy, Suspense } from 'react';
+// src/App.tsx
+import { lazy, ReactElement, Suspense } from 'react';
 import { Routes, Route } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import { LoadingState } from './components/LoadingState';
+import ErrorBoundary from './components/ErrorBoundary';
+import ErrorFallback from './components/ErrorFallback';
+import { lazyLoad } from './utils/lazyLoad';
 
+// Define route configuration type
+interface RouteConfig {
+  readonly path: string;
+  readonly element: ReactElement;
+  readonly componentName: string;
+}
 
-// Lazy load components
-const LoginPage = lazy(() => import('./components/auth/LoginPage'));
-const Dashboard = lazy(() => import('./Dashboard'));
-const ProtectedRoute = lazy(() => import('./components/auth/ProtectedRoute'));
+// Define routes object with type safety
+const ROUTES = {
+  LOGIN: '/login',
+  HOME: '/*'
+} as const;
 
-function App() {
+// Lazy load components with error handling
+const LoginPage = lazyLoad(
+  () => import('./components/auth/LoginPage'),
+  { retry: 2, retryDelay: 1000 }
+);
+
+const Dashboard = lazyLoad(
+  () => import('./Dashboard'),
+  { retry: 2 }
+);
+
+const ProtectedRoute = lazyLoad(
+  () => import('./components/auth/ProtectedRoute'),
+  { retry: 2 }
+);
+
+// Define route configurations with component names
+const routeConfig: RouteConfig[] = [
+  {
+    path: ROUTES.LOGIN,
+    element: <LoginPage />,
+    componentName: 'LoginPage'
+  },
+  {
+    path: ROUTES.HOME,
+    element: (
+      <ProtectedRoute>
+        <Dashboard />
+      </ProtectedRoute>
+    ),
+    componentName: 'Dashboard'
+  }
+];
+
+// Create a wrapper for suspense with error handling
+const SuspenseWithErrorBoundary: React.FC<{
+  children: React.ReactNode;
+  name: string;
+}> = ({ children, name }) => (
+  <ErrorBoundary
+    fallback={
+      <ErrorFallback 
+        error={new Error(`Failed to load ${name}. Please try refreshing the page.`)}
+        resetErrorBoundary={() => window.location.reload()}
+      />
+    }
+  >
+    <Suspense fallback={<LoadingState />}>
+      {children}
+    </Suspense>
+  </ErrorBoundary>
+);
+
+function App(): ReactElement {
   return (
-    <AuthProvider>
-      {/* Single Suspense boundary at the root */}
-      <Suspense fallback={<LoadingState />}>
+    <ErrorBoundary
+      fallback={
+        <ErrorFallback 
+          resetErrorBoundary={() => window.location.reload()}
+        />
+      }
+    >
+      <AuthProvider>
         <Routes>
-          <Route path="/login" element={<LoginPage />} />
-          <Route
-            path="/*"
-            element={
-              <ProtectedRoute>
-                <Dashboard />
-              </ProtectedRoute>
-            }
-          />
+          {routeConfig.map(({ path, element, componentName }) => (
+            <Route
+              key={path}
+              path={path}
+              element={
+                <SuspenseWithErrorBoundary name={componentName}>
+                  {element}
+                </SuspenseWithErrorBoundary>
+              }
+            />
+          ))}
         </Routes>
-      </Suspense>
-    </AuthProvider>
+      </AuthProvider>
+    </ErrorBoundary>
   );
 }
 
@@ -4669,6 +5198,100 @@ const CategorySection = ({ title, skills, player }) => {
 export default CategorySection;
 
 
+File: src\components\ErrorBoundary.tsx
+================================================================================
+
+// src/components/ErrorBoundary.tsx
+import React, { Component, ErrorInfo, ReactNode } from 'react';
+import ErrorFallback from './ErrorFallback';
+
+interface Props {
+  children: ReactNode;
+  fallback?: ReactNode;
+  onError?: (error: Error, errorInfo: ErrorInfo) => void;
+}
+
+interface State {
+  hasError: boolean;
+  error?: Error;
+}
+
+class ErrorBoundary extends Component<Props, State> {
+  public state: State = {
+    hasError: false,
+  };
+
+  public static getDerivedStateFromError(error: Error): State {
+    return { hasError: true, error };
+  }
+
+  public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    console.error('Error caught by error boundary:', error, errorInfo);
+    this.props.onError?.(error, errorInfo);
+  }
+
+  private handleReset = () => {
+    this.setState({ hasError: false, error: undefined });
+  };
+
+  public render() {
+    if (this.state.hasError) {
+      if (this.props.fallback) {
+        return this.props.fallback;
+      }
+
+      return (
+        <ErrorFallback
+          error={this.state.error}
+          resetErrorBoundary={this.handleReset}
+        />
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
+export default ErrorBoundary;
+
+File: src\components\ErrorFallback.tsx
+================================================================================
+
+// src/components/ErrorFallback.tsx
+interface ErrorFallbackProps {
+    error?: Error;
+    resetErrorBoundary?: () => void;
+  }
+  
+  const ErrorFallback: React.FC<ErrorFallbackProps> = ({ 
+    error, 
+    resetErrorBoundary 
+  }) => {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-900">
+        <div className="text-center p-4 max-w-md">
+          <h1 className="text-xl text-red-500 mb-2">
+            Oops! Something went wrong
+          </h1>
+          <p className="text-gray-400 mb-4">
+            {error?.message || 'Please try again or refresh the page'}
+          </p>
+          {resetErrorBoundary && (
+            <button
+              onClick={resetErrorBoundary}
+              className="px-4 py-2 bg-emerald-500 text-white rounded-lg 
+                       hover:bg-emerald-600 transition-colors"
+            >
+              Try Again
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  };
+  
+  export default ErrorFallback;
+
 File: src\components\FirestoreTest.jsx
 ================================================================================
 
@@ -5011,26 +5634,55 @@ export const InstallPrompt = () => {
 };
 
 
-File: src\components\LoadingState.jsx
+File: src\components\LoadingState.tsx
 ================================================================================
 
-export function LoadingState({ size = 'h-16 w-16', color = 'emerald-500', text = 'Loading...' }) {
+// export function LoadingState({ size = 'h-16 w-16', color = 'emerald-500', text = 'Loading...' }) {
+//   return (
+//     <div className="fixed inset-0 flex items-center justify-center bg-gray-900 bg-opacity-75 z-50">
+//       <div className="flex flex-col items-center gap-4">
+//         {/* Loading Spinner */}
+//         <div
+//           className={`animate-spin rounded-full ${size} border-t-4 border-b-4 border-${color}`}
+//           role="status"
+//           aria-label="Loading"
+//         />
+//         {/* Loading Text */}
+//         <div className="text-gray-300 text-lg">{text}</div>
+//       </div>
+//     </div>
+//   );
+// }
+
+// src/components/LoadingState.tsx
+interface LoadingStateProps {
+  size?: string;
+  color?: string;
+  text?: string;
+}
+
+const defaultProps = {
+  size: 'h-16 w-16',
+  color: 'emerald-500',
+  text: 'Loading...'
+};
+
+export const LoadingState: React.FC<LoadingStateProps> = (props) => {
+  const { size, color, text } = { ...defaultProps, ...props };
+
   return (
     <div className="fixed inset-0 flex items-center justify-center bg-gray-900 bg-opacity-75 z-50">
       <div className="flex flex-col items-center gap-4">
-        {/* Loading Spinner */}
         <div
-          className={`animate-spin rounded-full ${size} border-t-4 border-b-4 border-${color}`}
+          className={`animate-spin rounded-full border-t-4 border-b-4 border-${color} ${size}`}
           role="status"
           aria-label="Loading"
         />
-        {/* Loading Text */}
-        <div className="text-gray-300 text-lg">{text}</div>
+        {text && <div className="text-gray-300 text-lg">{text}</div>}
       </div>
     </div>
   );
-}
-
+};
 
 File: src\components\MiniRadial.jsx
 ================================================================================
@@ -6078,6 +6730,64 @@ const RoadmapModal = ({ isOpen, onClose, player }) => (
 
 export default RoadmapModal;
 
+File: src\components\RootErrorBoundary.tsx
+================================================================================
+
+// src/components/RootErrorBoundary.tsx
+import React, { Component, ErrorInfo, ReactNode } from 'react';
+import ErrorFallback from './ErrorFallback';
+
+interface Props {
+  children: ReactNode;
+}
+
+interface State {
+  hasError: boolean;
+  error?: Error;
+  errorInfo?: ErrorInfo;
+}
+
+class RootErrorBoundary extends Component<Props, State> {
+  public state: State = {
+    hasError: false
+  };
+
+  public static getDerivedStateFromError(error: Error): State {
+    return { hasError: true, error };
+  }
+
+  public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    // Log error to your error reporting service
+    console.error('Root level error:', error);
+    console.error('Error info:', errorInfo);
+    
+    this.setState({
+      errorInfo
+    });
+  }
+
+  private handleReset = () => {
+    // Reset error state and reload app
+    this.setState({ hasError: false, error: undefined, errorInfo: undefined });
+    window.location.reload();
+  };
+
+  public render() {
+    if (this.state.hasError) {
+      return (
+        <ErrorFallback
+          error={this.state.error}
+          resetErrorBoundary={this.handleReset}
+        />
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
+export default RootErrorBoundary;
+
 File: src\components\SkillCard.jsx
 ================================================================================
 
@@ -6512,65 +7222,142 @@ function ThrowingSection({ throwingData, player }) {
 export default ThrowingSection;
 
 
-File: src\config\firebase.js
+File: src\config\env.ts
 ================================================================================
 
-// src/config/firebase.js
+// src/config/env.ts
+import { EnvironmentVariables } from '../types/environment';
 
-import { initializeApp } from "firebase/app";
-import { getAnalytics } from "firebase/analytics";
-import { getAuth } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
+const requiredEnvVars = [
+  'REACT_APP_FIREBASE_API_KEY',
+  'REACT_APP_FIREBASE_AUTH_DOMAIN',
+  'REACT_APP_FIREBASE_PROJECT_ID',
+  'REACT_APP_FIREBASE_STORAGE_BUCKET',
+  'REACT_APP_FIREBASE_MESSAGING_SENDER_ID',
+  'REACT_APP_FIREBASE_APP_ID',
+] as const;
 
-// Your Firebase configuration object
-const firebaseConfig = {
-  apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
-  authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN,
-  projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID,
-  storageBucket: process.env.REACT_APP_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID,
-  appId: process.env.REACT_APP_FIREBASE_APP_ID,
-  measurementId: process.env.REACT_APP_FIREBASE_MEASUREMENT_ID
+const validateEnv = (): void => {
+  for (const envVar of requiredEnvVars) {
+    if (!process.env[envVar]) {
+      throw new Error(`Missing required environment variable: ${envVar}`);
+    }
+  }
 };
 
-// Initialize Firebase App, Auth, Firestore, and Analytics
-let app = null;
-let analytics = null;
-let auth = null;
-let db = null;
+export const getEnvConfig = (): Readonly<EnvironmentVariables> => {
+  validateEnv();
+
+  return {
+    NODE_ENV: process.env.NODE_ENV || 'development',
+    REACT_APP_FIREBASE_API_KEY: process.env.REACT_APP_FIREBASE_API_KEY!,
+    REACT_APP_FIREBASE_AUTH_DOMAIN: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN!,
+    REACT_APP_FIREBASE_PROJECT_ID: process.env.REACT_APP_FIREBASE_PROJECT_ID!,
+    REACT_APP_FIREBASE_STORAGE_BUCKET: process.env.REACT_APP_FIREBASE_STORAGE_BUCKET!,
+    REACT_APP_FIREBASE_MESSAGING_SENDER_ID: process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID!,
+    REACT_APP_FIREBASE_APP_ID: process.env.REACT_APP_FIREBASE_APP_ID!,
+    REACT_APP_FIREBASE_MEASUREMENT_ID: process.env.REACT_APP_FIREBASE_MEASUREMENT_ID || '',
+    PUBLIC_URL: process.env.PUBLIC_URL || '',
+  } as const;
+};
+
+File: src\config\firebase.ts
+================================================================================
+
+// src/config/firebase.ts
+import { initializeApp, FirebaseApp } from "firebase/app";
+import { Analytics, getAnalytics } from "firebase/analytics";
+import { Auth, getAuth } from "firebase/auth";
+import { Firestore, getFirestore } from "firebase/firestore";
+import { getEnvConfig } from './env';
+
+// Firebase instance type definitions
+interface FirebaseInstances {
+  app: FirebaseApp | null;
+  analytics: Analytics | null;
+  auth: Auth | null;
+  db: Firestore | null;
+}
+
+// Create a singleton instances object
+const instances: FirebaseInstances = {
+  app: null,
+  analytics: null,
+  auth: null,
+  db: null
+};
+
+// Get environment variables
+const env = getEnvConfig();
+
+// Firebase configuration with environment variables
+const firebaseConfig = {
+  apiKey: env.REACT_APP_FIREBASE_API_KEY,
+  authDomain: env.REACT_APP_FIREBASE_AUTH_DOMAIN,
+  projectId: env.REACT_APP_FIREBASE_PROJECT_ID,
+  storageBucket: env.REACT_APP_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID,
+  appId: env.REACT_APP_FIREBASE_APP_ID,
+  measurementId: env.REACT_APP_FIREBASE_MEASUREMENT_ID
+};
 
 /**
  * Initializes Firebase services.
  * Ensures that Firebase is initialized only once.
  * 
  * @returns {FirebaseApp} The initialized Firebase app instance.
+ * @throws {Error} If initialization fails
  */
-export const initializeFirebase = () => {
-  if (!app) {
-    // Initialize Firebase App
-    app = initializeApp(firebaseConfig);
-    
-    // Initialize Firebase Authentication
-    auth = getAuth(app);
-    
-    // Initialize Firestore
-    db = getFirestore(app);
-    
-    // Defer Analytics initialization by 2 seconds
-    setTimeout(() => {
-      analytics = getAnalytics(app);
-    }, 2000);
-    
+export const initializeFirebase = (): FirebaseApp => {
+  try {
+    if (!instances.app) {
+      // Initialize Firebase App
+      instances.app = initializeApp(firebaseConfig);
+      
+      // Initialize Firebase Authentication
+      instances.auth = getAuth(instances.app);
+      
+      // Initialize Firestore
+      instances.db = getFirestore(instances.app);
+      
+      // Defer Analytics initialization
+      if (typeof window !== 'undefined' && env.NODE_ENV === 'production') {
+        setTimeout(() => {
+          try {
+            instances.analytics = getAnalytics(instances.app!);
+          } catch (error) {
+            console.warn('Analytics initialization failed:', error);
+          }
+        }, 2000);
+      }
+    }
+
+    return instances.app;
+  } catch (error) {
+    console.error('Firebase initialization failed:', error);
+    throw error;
   }
-  return app;
 };
 
-// Immediately initialize Firebase when this module is imported
+// Initialize Firebase immediately
 initializeFirebase();
 
-// Export Firebase services for use in other parts of your application
-export { app, auth, db };
+// Export Firebase services with type safety
+export const getFirebaseInstances = () => {
+  if (!instances.app) {
+    throw new Error('Firebase has not been initialized. Call initializeFirebase first.');
+  }
+  
+  return {
+    app: instances.app,
+    auth: instances.auth!,
+    db: instances.db!,
+    analytics: instances.analytics
+  };
+};
 
+// Export individual services for backward compatibility
+export const { app, auth, db } = getFirebaseInstances();
 
 File: src\contexts\AuthContext.js
 ================================================================================
@@ -7047,43 +7834,63 @@ body {
 }
 
 
-File: src\index.js
+File: src\index.tsx
 ================================================================================
 
-/* ------------------------------------------
-   index.js (Refactored)
-------------------------------------------- */
+// src/index.tsx
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import './index.css';
-import App from './App.jsx';
+import App from './App';
 import { BrowserRouter } from 'react-router-dom';
 import { registerServiceWorker } from './serviceWorkerRegistration';
+import RootErrorBoundary from './components/RootErrorBoundary';
+import ErrorFallback from './components/ErrorFallback';
+import { getEnvConfig } from './config/env';
 
-// Create the root container for our React app
-const rootElement = document.getElementById('root');
-const root = ReactDOM.createRoot(rootElement);
+const initializeApp = () => {
+  try {
+    // Validate environment variables
+    getEnvConfig();
+    
+    const rootElement = document.getElementById('root');
+    if (!rootElement) throw new Error('Failed to find the root element');
+    
+    const root = ReactDOM.createRoot(rootElement);
 
-root.render(
-  <React.StrictMode>
-    <BrowserRouter>
-      {/* Force dark mode for the entire application */}
-      <div className="dark">
-        <App />
-      </div>
-    </BrowserRouter>
-  </React.StrictMode>
-);
+    root.render(
+      <React.StrictMode>
+        <RootErrorBoundary>
+          <BrowserRouter>
+            <div className="dark">
+              <App />
+            </div>
+          </BrowserRouter>
+        </RootErrorBoundary>
+      </React.StrictMode>
+    );
 
-// Register the service worker for offline capabilities
-registerServiceWorker();
+    if (process.env.NODE_ENV === 'production') {
+      registerServiceWorker();
+    }
+  } catch (error) {
+    // Handle initialization errors
+    console.error('Failed to initialize app:', error);
+    
+    const rootElement = document.getElementById('root');
+    if (rootElement) {
+      const root = ReactDOM.createRoot(rootElement);
+      root.render(
+        <ErrorFallback 
+          error={error as Error}
+          resetErrorBoundary={() => window.location.reload()} 
+        />
+      );
+    }
+  }
+};
 
-// Log service worker control status
-if (navigator.serviceWorker && navigator.serviceWorker.controller) {
-} else {
-  console.warn('[SW] Service worker is NOT controlling the page');
-}
-
+initializeApp();
 
 File: src\reportWebVitals.js
 ================================================================================
@@ -7225,6 +8032,52 @@ File: src\setupTests.js
 // learn more: https://github.com/testing-library/jest-dom
 import '@testing-library/jest-dom';
 
+
+File: src\types\components.d.ts
+================================================================================
+
+// src/types/components.d.ts
+
+export interface LoadingStateProps {
+    size?: string;
+    color?: string;
+    text?: string;
+  }
+  
+  export interface ErrorBoundaryProps {
+    children: React.ReactNode;
+    fallback: React.ReactElement;
+  }
+  
+  export interface AuthProviderProps {
+    children: React.ReactNode;
+  }
+  
+  export interface ProtectedRouteProps {
+    children: React.ReactNode;
+  }
+
+File: src\types\environment.d.ts
+================================================================================
+
+// src/types/environment.d.ts
+export interface EnvironmentVariables {
+    readonly NODE_ENV: 'development' | 'production' | 'test';
+    readonly REACT_APP_FIREBASE_API_KEY: string;
+    readonly REACT_APP_FIREBASE_AUTH_DOMAIN: string;
+    readonly REACT_APP_FIREBASE_PROJECT_ID: string;
+    readonly REACT_APP_FIREBASE_STORAGE_BUCKET: string;
+    readonly REACT_APP_FIREBASE_MESSAGING_SENDER_ID: string;
+    readonly REACT_APP_FIREBASE_APP_ID: string;
+    readonly REACT_APP_FIREBASE_MEASUREMENT_ID: string;
+    readonly PUBLIC_URL: string;
+  }
+  
+  declare global {
+    namespace NodeJS {
+      interface ProcessEnv extends EnvironmentVariables {}
+    }
+  }
 
 File: src\utils\cache.js
 ================================================================================
@@ -7408,6 +8261,39 @@ export function computeOverallScore(player) {
   }
   return count === 0 ? 0 : parseFloat((sum / count).toFixed(1));
 }
+
+
+File: src\utils\lazyLoad.ts
+================================================================================
+
+// src/utils/lazyLoad.ts
+import { lazy, ComponentType } from 'react';
+
+interface LazyLoadOptions {
+  readonly retry?: number;
+  readonly retryDelay?: number;
+}
+
+export const lazyLoad = <T extends ComponentType<any>>(
+  importPromise: () => Promise<{ default: T }>,
+  options: LazyLoadOptions = {}
+) => {
+  const { retry = 1, retryDelay = 1000 } = options;
+
+  const retryImport = (attemptsLeft: number, delay: number): Promise<{ default: T }> => {
+    return importPromise().catch((error: Error) => {
+      if (attemptsLeft <= 1) {
+        console.error('Lazy load failed after retries:', error);
+        return Promise.reject(error);
+      }
+      return new Promise((resolve) => setTimeout(resolve, delay)).then(() =>
+        retryImport(attemptsLeft - 1, delay)
+      );
+    });
+  };
+
+  return lazy(() => retryImport(retry, retryDelay));
+};
 
 
 File: src\utils\slugify.js
