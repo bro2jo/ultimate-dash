@@ -1,6 +1,6 @@
 Project: performance-app
 Version: 0.1.0
-Generated: 2025-01-19T22:09:04.412Z
+Generated: 2025-01-20T00:51:55.550Z
 ================================================================================
 
 File: concat-files.js
@@ -877,107 +877,38 @@ function App(): ReactElement {
 export default App;
 
 
-File: src\components\AthleteDropdown.jsx
+File: src\components\AthleteList.tsx
 ================================================================================
 
-// src/components/AthleteDropdown.jsx
-
-import React, { useState, useRef, useEffect } from 'react';
-import { ChevronDown } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
-
-const AthleteDropdown = ({ athletes, selectedAthleteId, onSelectAthlete }) => {
-  const [isOpen, setIsOpen] = useState(false);
-  const dropdownRef = useRef();
-
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (
-        dropdownRef.current &&
-        !dropdownRef.current.contains(event.target)
-      ) {
-        setIsOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
-  }, []);
-
-  // Get the selected athlete's name
-  const selectedAthlete = athletes.find(a => a.id === selectedAthleteId);
-
-  return (
-    <div className="absolute top-4 right-4 md:top-6 md:right-6" ref={dropdownRef}>
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center bg-gray-800 text-gray-300 hover:bg-gray-700 px-3 py-2 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500"
-        aria-haspopup="listbox"
-        aria-expanded={isOpen}
-      >
-        <span className="mr-2 text-sm">{selectedAthlete ? selectedAthlete.name : "Select Athlete"}</span>
-        <ChevronDown className="w-4 h-4" aria-hidden="true" />
-      </button>
-
-      <AnimatePresence>
-        {isOpen && (
-          <motion.div
-            className="mt-2 w-48 bg-gray-800 rounded-md shadow-lg z-30"
-            role="listbox"
-            aria-labelledby="athlete-dropdown"
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.95 }}
-            transition={{ duration: 0.2 }}
-          >
-            <ul className="py-1">
-              {athletes.map(athlete => (
-                <li key={athlete.id}>
-                  <button
-                    onClick={() => {
-                      onSelectAthlete(athlete.id);
-                      setIsOpen(false);
-                    }}
-                    className={`w-full text-left px-4 py-2 text-sm ${
-                      athlete.id === selectedAthleteId
-                        ? 'bg-gray-700 text-white'
-                        : 'text-gray-300 hover:bg-gray-700 hover:text-white'
-                    }`}
-                    role="option"
-                    aria-selected={athlete.id === selectedAthleteId}
-                  >
-                    {athlete.name}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  );
-};
-
-export default AthleteDropdown;
-
-
-File: src\components\AthleteList.jsx
-================================================================================
-
-// src/components/AthleteList.jsx
-
+// src/components/AthleteList.tsx
 import React from 'react';
 
-const AthleteList = ({ athletes }) => {
+interface Athlete {
+  id: string;
+  metadata: {
+    name: string;
+    email: string;
+    // Add other necessary fields if needed
+  };
+}
+
+interface AthleteListProps {
+  athletes: Athlete[];
+}
+
+const AthleteList: React.FC<AthleteListProps> = ({ athletes }) => {
+  if (athletes.length === 0) {
+    return <p>No athletes found.</p>;
+  }
+
   return (
     <div>
-      <h2>Athletes</h2>
-      <ul>
-        {athletes.map(athlete => (
-          <li key={athlete.id}>
-            <strong>{athlete.metadata.name}</strong> - {athlete.metadata.email}
+      <h2 className="text-xl font-semibold mb-4">Athletes</h2>
+      <ul className="space-y-2">
+        {athletes.map((athlete) => (
+          <li key={athlete.id} className="flex justify-between items-center p-2 bg-gray-800 rounded-md">
+            <span className="font-medium text-white">{athlete.metadata.name}</span>
+            <span className="text-gray-400">{athlete.metadata.email}</span>
           </li>
         ))}
       </ul>
@@ -1352,6 +1283,11 @@ const CategorySection = ({ title, skills, player }) => {
 export default CategorySection;
 
 
+File: src\components\Dropdown.tsx
+================================================================================
+
+
+
 File: src\components\ErrorBoundary.tsx
 ================================================================================
 
@@ -1530,91 +1466,136 @@ const FloatingActionButton = ({ onClick }) => {
 
 export default FloatingActionButton;
 
-File: src\components\HomeSection.jsx
+File: src\components\HomeSection.tsx
 ================================================================================
 
-// src/components/HomeSection.jsx
-
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, memo } from 'react';
+import type { Athlete, CategoryAverages } from '../types/athlete';
+import { RADAR_LABELS } from '../constants/categoryData';
 import RadarChart from './RadarChart';
 import SwipeableInsights from './SwipeableInsights';
 import SkillHierarchy from './SkillHierarchy';
 import { computeCategoryAverages } from '../utils/helpers';
 
-function HomeSection({ player }) {
-  const [averages, setAverages] = useState({
-    mental: 0,
-    physical: 0,
-    cutting: 0,
-    handling: 0,
-    throwing: 0,
-    defensive: 0,
-    offensive: 0,
-  });
+interface HomeSectionProps {
+  player: Athlete;
+}
+
+interface StatCardProps {
+  title: string;
+  content: React.ReactNode;
+  className?: string;
+  contentClassName?: string;
+}
+
+const initialAverages: CategoryAverages = {
+  mental: 0,
+  physical: 0,
+  cutting: 0,
+  handling: 0,
+  throwing: 0,
+  defensive: 0,
+  offensive: 0,
+};
+
+const StatCard = memo<StatCardProps>(({ 
+  title, 
+  content, 
+  className = '',
+  contentClassName = ''
+}) => (
+  <div className={`
+    bg-gray-800 
+    p-4 sm:p-5 
+    rounded-lg 
+    shadow-md 
+    flex 
+    flex-col 
+    h-full
+    ${className}
+  `}>
+    <h2 className="text-base sm:text-lg font-semibold text-gray-100 mb-2">
+      {title}
+    </h2>
+    <div className={`
+      flex-1 
+      w-full 
+      flex 
+      min-h-0
+      ${contentClassName}
+    `}>
+      {content}
+    </div>
+  </div>
+));
+
+StatCard.displayName = 'StatCard';
+
+const RadarChartSection = memo<{ 
+  labels: string[];
+  dataValues: number[];
+}>(({ labels, dataValues }) => (
+  <div className="w-full h-full min-h-[300px] sm:min-h-[350px] max-h-[400px]">
+    <RadarChart 
+      labels={labels} 
+      dataValues={dataValues} 
+    />
+  </div>
+));
+
+RadarChartSection.displayName = 'RadarChartSection';
+
+export const HomeSection: React.FC<HomeSectionProps> = ({ player }) => {
+  const [averages, setAverages] = useState<CategoryAverages>(initialAverages);
 
   useEffect(() => {
-    const avg = computeCategoryAverages(player);
-    setAverages(avg);
+    setAverages(computeCategoryAverages(player));
   }, [player]);
 
-  // Radar chart data for 6 categories
-  const radarLabels = ['Mental', 'Physical', 'Cutting', 'Handling', 'Throwing', 'Defense'];
-  const radarDataValues = [
-    averages.mental,
-    averages.physical,
-    averages.cutting,
-    averages.handling,
-    averages.throwing,
-    averages.defensive,
-  ];
+  const labels = React.useMemo(() => [...RADAR_LABELS], []);
+  
+  const radarDataValues = React.useMemo(() => 
+    labels.map(label => 
+      averages[label.toLowerCase() as keyof CategoryAverages]
+    ), [averages, labels]
+  );
 
   return (
-    <div className="mx-auto space-y-6">
-      {/* Key Insights (Top 3 strengths, etc.) */}
+    <div className="w-full mx-auto space-y-4 sm:space-y-6 px-3 sm:px-4 py-4">
       <SwipeableInsights 
         player={player} 
-        growthTargets={player.growth_targets || []}
+        growthTargets={player.growth_targets}
       />
 
-      {/* Main Stats Section */}
-      <div className="grid gap-6 grid-cols-1 lg:grid-cols-2">
-        {/* Radar Chart */}
-        <div className="bg-gray-800 p-5 rounded-lg shadow-md">
-          <h2 className="text-lg font-semibold text-gray-100 mb-4 mt-0">
-            Category Averages
-          </h2>
-          <div className="w-full flex justify-center">
-            <div className="w-full aspect-square max-w-[400px]">
-              <RadarChart labels={radarLabels} dataValues={radarDataValues} />
+      <div className="grid gap-4 sm:gap-6 grid-cols-1 lg:grid-cols-2 h-[500px]">
+        <StatCard
+          title="Category Averages"
+          contentClassName="items-center justify-center"
+          content={
+            <RadarChartSection 
+              labels={labels}
+              dataValues={radarDataValues} 
+            />
+          }
+        />
+
+        <StatCard
+          title="Detailed Breakdown"
+          contentClassName="overflow-hidden"
+          content={
+            <div className="w-full h-full overflow-y-auto overflow-x-hidden custom-scrollbar">
+              <div className="w-full h-full flex flex-col justify-between">
+                <SkillHierarchy player={player} />
+              </div>
             </div>
-          </div>
-        </div>
-
-        {/* Skill Hierarchy */}
-        <div className="bg-gray-800 p-5 rounded-lg shadow-md">
-          <h2 className="text-lg font-semibold text-gray-100 mb-4 mt-0">
-            Detailed Breakdown
-          </h2>
-          <div className="overflow-auto max-h-[400px] custom-scrollbar">
-            <SkillHierarchy player={player} />
-          </div>
-        </div>
-      </div>
-
-      {/* Additional Info or Future Sections */}
-      <div className="bg-gray-800 p-5 rounded-lg shadow-md">
-        <h2 className="text-lg font-semibold text-gray-100 mb-4">
-          Recent Progress
-        </h2>
-        <p className="text-gray-400 text-sm">
-          Progress tracking section coming soon...
-        </p>
+          }
+        />
       </div>
     </div>
   );
-}
+};
 
-export default HomeSection;
+export default memo(HomeSection);
 
 File: src\components\InsightsSection.jsx
 ================================================================================
@@ -2376,10 +2357,10 @@ const PWADebug = () => {
 
 export default PWADebug;
 
-File: src\components\RadarChart.jsx
+File: src\components\RadarChart.tsx
 ================================================================================
 
-// src/components/RadarChart.jsx
+// src/components/RadarChart.tsx
 
 import React from 'react';
 import { Radar } from 'react-chartjs-2';
@@ -2391,6 +2372,8 @@ import {
   Filler,
   Tooltip,
   Legend,
+  ChartOptions,
+  ChartData,
 } from 'chart.js';
 
 ChartJS.register(
@@ -2402,15 +2385,23 @@ ChartJS.register(
   Legend
 );
 
+interface RadarChartProps {
+  labels: string[];
+  dataValues: number[];
+  onDataPointClick?: (dataPoint: {
+    label: string;
+    value: number;
+    index: number;
+    datasetIndex: number;
+  }) => void;
+}
+
 /**
  * RadarChart Component
- * @param {Object} props - Component props
- * @param {Array} props.labels - Labels for the radar chart axes
- * @param {Array} props.dataValues - Data values for each axis
- * @param {Function} props.onDataPointClick - Callback when a data point is clicked
+ * @param {RadarChartProps} props - Component props
  */
-const RadarChart = ({ labels, dataValues, onDataPointClick }) => {
-  const data = {
+const RadarChart: React.FC<RadarChartProps> = ({ labels, dataValues, onDataPointClick }) => {
+  const data: ChartData<'radar', number[], string> = {
     labels,
     datasets: [
       {
@@ -2424,13 +2415,13 @@ const RadarChart = ({ labels, dataValues, onDataPointClick }) => {
         pointHoverBackgroundColor: '#fff',
         pointHoverBorderColor: 'rgba(16, 185, 129, 1)',
         pointRadius: 3, // Reduced from 5 to 3
-        pointHoverRadius: 7, // Kept or adjusted as needed
-        pointHitRadius: 10, // Maintained for consistent touch area
+        pointHoverRadius: 7, // Adjust as needed
+        pointHitRadius: 10, // Consistent touch area
       },
     ],
   };
 
-  const options = {
+  const options: ChartOptions<'radar'> = {
     responsive: true,
     maintainAspectRatio: false, // Allows the chart to fill the container
     scales: {
@@ -2493,10 +2484,10 @@ const RadarChart = ({ labels, dataValues, onDataPointClick }) => {
     },
     // Optional: Change cursor to pointer on hover
     onHover: (event, elements) => {
-      const target = event.native.target;
-      if (elements.length > 0) {
+      const target = event.native?.target as HTMLElement;
+      if (elements.length > 0 && target) {
         target.style.cursor = 'pointer';
-      } else {
+      } else if (target) {
         target.style.cursor = 'default';
       }
     },
@@ -2969,96 +2960,129 @@ const SkillCard = ({ label, value }) => {
 export default SkillCard;
 
 
-File: src\components\SkillHierarchy.jsx
+File: src\components\SkillHierarchy.tsx
 ================================================================================
 
-// src/components/SkillHierarchy.jsx
-import React from 'react';
-import { ChevronRight } from 'lucide-react';
+import React, { memo } from 'react';
+import { ChevronRight, AlertCircle } from 'lucide-react';
 import { averageOfKeys, computeCategoryAverages, computeOverallScore } from '../utils/helpers';
+import type { Athlete } from '../types/athlete';
 
-const SkillBar = ({ value, maxValue = 10 }) => (
-  <div className="w-24 bg-gray-700 rounded-full h-1.5 overflow-hidden">
-    <div
-      className="h-1.5 bg-emerald-500 transition-all duration-300"
-      style={{ width: `${(value / maxValue) * 100}%` }}
-    />
-  </div>
-);
+interface SkillBarProps {
+  value: number;
+  maxValue?: number;
+}
 
-const SkillNode = ({ label, value, depth = 0, children }) => {
-  const hasChildren = React.Children.count(children) > 0;
+interface SkillNodeProps {
+  label: string;
+  value: number;
+  depth?: number;
+  children?: React.ReactNode;
+}
+
+const SkillBar = memo<SkillBarProps>(({ value, maxValue = 10 }) => {
+  const isLowScore = value < 5;
   
   return (
-    <div className="space-y-2">
-      <div className={`flex items-center gap-3 ${hasChildren ? 'mb-2' : ''}`}>
-        {depth > 0 && (
-          <div className="flex items-center">
-            <div 
-              className="w-4 h-px bg-gray-700"
-              style={{ marginLeft: `${(depth - 1) * 16}px` }}
-            />
-            <ChevronRight className="w-4 h-4 text-gray-600" />
+    <div className="w-full h-1.5 bg-gray-700/50 rounded-full overflow-hidden">
+      <div
+        className={`h-full transition-all duration-300 ${isLowScore ? 'bg-orange-500' : 'bg-emerald-500'}`}
+        style={{ width: `${(value / maxValue) * 100}%` }}
+      />
+    </div>
+  );
+});
+
+SkillBar.displayName = 'SkillBar';
+
+const SkillNode = memo<SkillNodeProps>(({ label, value, depth = 0, children }) => {
+  const hasChildren = React.Children.count(children) > 0;
+  const isLowScore = value < 5;
+  
+  return (
+    <div className="flex-1 flex flex-col">
+      <div className={`
+        ${depth === 0 ? 'bg-gray-800/40 rounded-lg py-2 px-3' : 'py-1.5 px-3'}
+      `}>
+        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+          {depth > 0 && (
+            <div className="flex items-center flex-shrink-0">
+              <div 
+                className="w-px h-full absolute left-0 top-0 bottom-0 bg-gray-700/30"
+                style={{ left: `${depth * 12}px` }}
+              />
+              <div className="ml-6">
+                <ChevronRight className="w-3 h-3 text-gray-600" />
+              </div>
+            </div>
+          )}
+          
+          <div className="flex-1 flex items-center gap-4 min-w-0">
+            <span className={`
+              font-medium truncate
+              ${depth === 0 ? 'text-base text-white' : 'text-sm text-gray-300'}
+            `}>
+              {label}
+            </span>
+            
+            {isLowScore && (
+              <AlertCircle className="w-3 h-3 text-orange-500 flex-shrink-0" />
+            )}
           </div>
-        )}
-        
-        <div className="flex-1 flex items-center justify-between">
-          <span className="text-sm font-medium text-gray-300">{label}</span>
-          <div className="flex items-center gap-3">
-            <SkillBar value={value} />
-            <span className="text-sm font-semibold text-emerald-400 w-8">
+
+          <div className="flex items-center gap-3 flex-shrink-0">
+            <div className="w-24 sm:w-32">
+              <SkillBar value={value} />
+            </div>
+            <span className={`
+              text-xs sm:text-sm font-medium w-8 text-right
+              ${isLowScore ? 'text-orange-500' : 'text-emerald-500'}
+            `}>
               {value.toFixed(1)}
             </span>
           </div>
         </div>
       </div>
-      
+
       {hasChildren && (
-        <div className="space-y-2">
+        <div className="flex-1 flex flex-col relative ml-2 sm:ml-3">
           {children}
         </div>
       )}
     </div>
   );
-};
+});
 
-const SkillHierarchy = ({ player }) => {
-  // Get all category averages using helper function
+SkillNode.displayName = 'SkillNode';
+
+const SkillHierarchy: React.FC<{ player: Athlete }> = ({ player }) => {
   const categoryAverages = computeCategoryAverages(player);
   const overallScore = computeOverallScore(player);
 
-  // Compute throwing subcategory averages (not included in helpers)
-  const throwingSubcategories = {
-    backhand: [
+  const throwingAverages = {
+    backhand: averageOfKeys(player, [
       'backhand_power', 'backhand_accuracy', 'backhand_quick_release',
       'backhand_release_variations', 'backhand_against_wind',
       'backhand_against_difficult_marks', 'backhand_tempo_control'
-    ],
-    forehand: [
+    ]),
+    forehand: averageOfKeys(player, [
       'forehand_power', 'forehand_accuracy', 'forehand_quick_release',
       'forehand_release_variations', 'forehand_against_wind',
       'forehand_against_difficult_marks', 'forehand_tempo_control'
-    ],
-    specialty: [
+    ]),
+    specialty: averageOfKeys(player, [
       'specialty_power', 'specialty_accuracy', 'specialty_quick_release',
       'specialty_release_variations', 'specialty_against_wind',
       'specialty_against_difficult_marks', 'specialty_tempo_control'
-    ],
-    hucking: [
+    ]),
+    hucking: averageOfKeys(player, [
       'hucking_confidence', 'hucking_shape_control',
       'hucking_tempo_control', 'hucking_placement'
-    ]
-  };
-
-  const throwingAverages = {
-    backhand: averageOfKeys(player, throwingSubcategories.backhand),
-    forehand: averageOfKeys(player, throwingSubcategories.forehand),
-    specialty: averageOfKeys(player, throwingSubcategories.specialty),
-    hucking: averageOfKeys(player, throwingSubcategories.hucking)
+    ])
   };
 
   return (
-    <div className="space-y-4">
+    <div className="h-full flex flex-col justify-between">
       <SkillNode label="Overall" value={overallScore}>
         <SkillNode label="Physical" value={categoryAverages.physical} depth={1} />
         <SkillNode label="Mental" value={categoryAverages.mental} depth={1} />
@@ -3078,18 +3102,43 @@ const SkillHierarchy = ({ player }) => {
   );
 };
 
-export default SkillHierarchy;
+export default memo(SkillHierarchy);
 
-File: src\components\SwipeableInsights.jsx
+File: src\components\SwipeableInsights.tsx
 ================================================================================
 
-import React, { useState, useEffect, useRef } from 'react';
-import { motion, AnimatePresence, useAnimation } from 'framer-motion';
+// src/components/SwipeableInsights.tsx
+import React, { useState, useEffect, useRef, FC } from 'react';
+import { motion, AnimatePresence, useAnimation, PanInfo } from 'framer-motion';
+import type { Athlete } from '../types/athlete';
 
+// Constants
 const SWIPE_THRESHOLD = 30;
 const VELOCITY_THRESHOLD = 200;
 
-const InsightsCard = ({ title, data = [], subtitle }) => (
+// Type definitions
+type SkillEntry = [string, number];
+type SkillPair = [string, number];
+
+interface SwipeableInsightsProps {
+  player: Athlete;
+  growthTargets?: string[];
+}
+
+interface InsightCardData {
+  title: string;
+  data: SkillPair[];
+  subtitle?: string | null;
+}
+
+interface InsightsCardProps {
+  title: string;
+  data: SkillPair[];
+  subtitle?: string | null;
+}
+
+// InsightsCard Component
+const InsightsCard: FC<InsightsCardProps> = ({ title, data = [], subtitle }) => (
   <div className="bg-gray-800 p-4 rounded-lg shadow-md w-full">
     <div className="text-gray-300 text-xs font-bold uppercase tracking-widest mb-2">
       <span className="font-semibold text-emerald-400">{title}</span>
@@ -3112,95 +3161,96 @@ const InsightsCard = ({ title, data = [], subtitle }) => (
   </div>
 );
 
-const SwipeableInsights = ({ player, growthTargets = [] }) => {
+const SwipeableInsights: FC<SwipeableInsightsProps> = ({ player, growthTargets = [] }) => {
+  const [currentIndex, setCurrentIndex] = useState<number>(0);
+  const [isDragging, setIsDragging] = useState<boolean>(false);
+  const controls = useAnimation();
+  const [containerWidth, setContainerWidth] = useState<number>(0);
+  const containerRef = useRef<HTMLDivElement>(null);
 
-    const [currentIndex, setCurrentIndex] = useState(0);
-    const [isDragging, setIsDragging] = useState(false);
-    const controls = useAnimation();
-    const [containerWidth, setContainerWidth] = useState(0);
-    const containerRef = useRef(null);
-  
-    const growthTargetPairs = growthTargets
-    .map(targetKey => [
-      targetKey.replace(/_/g, ' '),  
-      player.skills[targetKey] || 0  // Access skills through player.skills
+  // Prepare growth target pairs
+  const growthTargetPairs: SkillPair[] = growthTargets
+    .map((targetKey): SkillPair => [
+      targetKey.replace(/_/g, ' '),
+      player.skills[targetKey] || 0
     ])
-    .filter(([_, value]) => typeof value === 'number'); 
-  
-    useEffect(() => {
-      const updateWidth = () => {
-        if (containerRef.current) {
-          setContainerWidth(containerRef.current.offsetWidth);
-        }
-      };
-      
-      updateWidth();
-      const resizeObserver = new ResizeObserver(updateWidth);
-      
-      if (containerRef.current) {
-        resizeObserver.observe(containerRef.current);
-      }
-      
-      return () => resizeObserver.disconnect();
-    }, []);
-  
-    const getSortedSkills = () => {
-        // Change to access player.skills instead of player directly
-        const skillEntries = Object.entries(player.skills)
-          .filter(([key, val]) => typeof val === 'number' && !key.includes('id'))
-          .sort((a, b) => b[1] - a[1]);
-        return skillEntries;
-      };
-  
-    // Call getSortedSkills once and store result
-    const sortedSkills = getSortedSkills();
-  
-    const cards = [
-      {
-        title: 'Current Growth Targets',
-        data: growthTargetPairs,
-        subtitle: growthTargetPairs.length === 0 ? 'No growth targets set' : null
-      },
-      {
-        title: 'Top 3 Strengths',
-        data: sortedSkills.slice(0, 3)
-      },
-      {
-        title: 'Areas for Improvement',
-        data: [...sortedSkills].reverse().slice(0, 3)
-      }
-    ];
+    .filter((pair): pair is SkillPair => typeof pair[1] === 'number');
 
-  const snapToIndex = (index) => {
-    controls.start({
-      x: -index * containerWidth,
-      transition: {
-        type: "spring",
-        stiffness: 400,
-        damping: 40,
-        mass: 0.8,
-        restSpeed: 0.5,
-        restDelta: 0.5
+  useEffect(() => {
+    const updateWidth = () => {
+      if (containerRef.current) {
+        setContainerWidth(containerRef.current.offsetWidth);
       }
-    }).then(() => {
-      setIsDragging(false);
-    });
+    };
+
+    updateWidth();
+    const resizeObserver = new ResizeObserver(updateWidth);
+
+    if (containerRef.current) {
+      resizeObserver.observe(containerRef.current);
+    }
+
+    return () => resizeObserver.disconnect();
+  }, []);
+
+  const getSortedSkills = (): SkillPair[] => {
+    return Object.entries(player.skills)
+      .filter((entry): entry is SkillEntry => 
+        typeof entry[1] === 'number' && !entry[0].includes('id')
+      )
+      .sort((a, b) => b[1] - a[1]);
+  };
+
+  const sortedSkills = getSortedSkills();
+
+  const cards: InsightCardData[] = [
+    {
+      title: 'Current Growth Targets',
+      data: growthTargetPairs,
+      subtitle: growthTargetPairs.length === 0 ? 'No growth targets set' : null,
+    },
+    {
+      title: 'Top 3 Strengths',
+      data: sortedSkills.slice(0, 3),
+    },
+    {
+      title: 'Areas for Improvement',
+      data: [...sortedSkills].reverse().slice(0, 3),
+    },
+  ];
+
+  const snapToIndex = (index: number) => {
+    controls
+      .start({
+        x: -index * containerWidth,
+        transition: {
+          type: 'spring',
+          stiffness: 400,
+          damping: 40,
+          mass: 0.8,
+          restSpeed: 0.5,
+          restDelta: 0.5,
+        },
+      })
+      .then(() => {
+        setIsDragging(false);
+      });
   };
 
   const handleDragStart = () => {
     setIsDragging(true);
   };
 
-  const handleDragEnd = (event, info) => {
+  const handleDragEnd = (event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
     const swipe = info.offset.x;
     const velocity = info.velocity.x;
-    
+
     const shouldSwipe = Math.abs(swipe) > SWIPE_THRESHOLD || Math.abs(velocity) > VELOCITY_THRESHOLD;
-    
+
     if (shouldSwipe) {
       const direction = swipe > 0 ? -1 : 1;
       const nextIndex = currentIndex + direction;
-      
+
       if (nextIndex >= 0 && nextIndex < cards.length) {
         setCurrentIndex(nextIndex);
         snapToIndex(nextIndex);
@@ -3212,7 +3262,7 @@ const SwipeableInsights = ({ player, growthTargets = [] }) => {
     }
   };
 
-  const handleDotClick = (index) => {
+  const handleDotClick = (index: number) => {
     if (!isDragging) {
       setCurrentIndex(index);
       snapToIndex(index);
@@ -3221,11 +3271,12 @@ const SwipeableInsights = ({ player, growthTargets = [] }) => {
 
   return (
     <div className="mb-6">
-      <h2 className="text-xl font-bold uppercase mb-3 text-gray-100">
-        Key Insights
-      </h2>
-      
-      <div ref={containerRef} className="relative insights-container overflow-hidden bg-gray-800 rounded-lg shadow-md">
+      <h2 className="text-xl font-bold uppercase mb-3 text-gray-100">Key Insights</h2>
+
+      <div
+        ref={containerRef}
+        className="relative insights-container overflow-hidden bg-gray-800 rounded-lg shadow-md"
+      >
         <AnimatePresence initial={false}>
           <motion.div
             className="flex"
@@ -3233,7 +3284,7 @@ const SwipeableInsights = ({ player, growthTargets = [] }) => {
             drag="x"
             dragConstraints={{
               left: -containerWidth * (cards.length - 1),
-              right: 0
+              right: 0,
             }}
             dragElastic={0.1}
             dragMomentum={false}
@@ -3248,25 +3299,21 @@ const SwipeableInsights = ({ player, growthTargets = [] }) => {
                 className="flex-shrink-0"
                 style={{ width: containerWidth }}
               >
-                <InsightsCard 
-                  {...card}
-                  key={`insight-${index}`} 
-                />
+                <InsightsCard {...card} />
               </div>
             ))}
           </motion.div>
         </AnimatePresence>
       </div>
 
-      {/* Navigation Dots */}
       <div className="flex justify-center mt-4 space-x-3">
         {cards.map((_, index) => (
           <button
             key={`dot-${index}`}
             onClick={() => handleDotClick(index)}
             className={`w-2 h-2 rounded-full transition-all duration-200 ${
-              index === currentIndex 
-                ? 'bg-emerald-400 scale-110' 
+              index === currentIndex
+                ? 'bg-emerald-400 scale-110'
                 : 'bg-gray-600 hover:bg-gray-500'
             }`}
             disabled={isDragging}
@@ -3512,6 +3559,121 @@ export const getFirebaseInstances = () => {
 
 // Export individual services for backward compatibility
 export const { app, auth, db } = getFirebaseInstances();
+
+File: src\constants\categoryData.ts
+================================================================================
+
+// src/constants/categoryData.ts
+import { CategoryData } from '../types/athlete';
+
+export const CATEGORY_DATA: CategoryData = {
+  physical: [
+    { key: 'speed_explosiveness', label: 'Speed & Explosiveness' },
+    { key: 'endurance', label: 'Endurance' },
+    { key: 'vertical_leap', label: 'Vertical Leap' },
+    { key: 'change_of_direction', label: 'Change of Direction' },
+    { key: 'boxing_out', label: 'Boxing Out' },
+    { key: 'laying_out', label: 'Laying Out' },
+    { key: 'recovery', label: 'Recovery' },
+    { key: 'flexibility_mobility', label: 'Flexibility & Mobility' },
+    { key: 'injury_prevention', label: 'Injury Prevention' },
+  ],
+  offensive: {
+    cutting: [
+      { key: 'angles', label: 'Angles' },
+      { key: 'fakes_footwork', label: 'Fakes & Footwork' },
+      { key: 'timing_field_vision', label: 'Timing & Field Vision' },
+      { key: 'decisiveness', label: 'Decisiveness' },
+      { key: 'catching', label: 'Catching' },
+      { key: 'flow_awareness', label: 'Flow Awareness' },
+      { key: 'isolation_cutting', label: 'Isolation Cutting' },
+      { key: 'continuation_cutting', label: 'Continuation Cutting' },
+    ],
+    handling: [
+      { key: 'handler_movement', label: 'Handler Movement' },
+      { key: 'poise_with_disc', label: 'Poise w/ Disc' },
+      { key: 'breaking_the_mark', label: 'Breaking the Mark' },
+      { key: 'resetting_from_trap_sideline', label: 'Reset from Trap' },
+      { key: 'decision_making_vision', label: 'Decision Making & Vision' },
+      { key: 'offensive_pattern_recognition', label: 'Pattern Recognition' },
+      { key: 'throw_and_go', label: 'Throw & Go' },
+    ],
+    throwing: {
+      backhand: [
+        { key: 'backhand_power', label: 'Backhand Power' },
+        { key: 'backhand_accuracy', label: 'Backhand Accuracy' },
+        { key: 'backhand_quick_release', label: 'Backhand Quick Release' },
+        { key: 'backhand_release_variations', label: 'Backhand Variations' },
+        { key: 'backhand_against_wind', label: 'Backhand vs Wind' },
+        { key: 'backhand_against_difficult_marks', label: 'Backhand vs Difficult Marks' },
+        { key: 'backhand_tempo_control', label: 'Backhand Tempo Control' },
+      ],
+      forehand: [
+        { key: 'forehand_power', label: 'Forehand Power' },
+        { key: 'forehand_accuracy', label: 'Forehand Accuracy' },
+        { key: 'forehand_quick_release', label: 'Forehand Quick Release' },
+        { key: 'forehand_release_variations', label: 'Forehand Variations' },
+        { key: 'forehand_against_wind', label: 'Forehand vs Wind' },
+        { key: 'forehand_against_difficult_marks', label: 'Forehand vs Difficult Marks' },
+        { key: 'forehand_tempo_control', label: 'Forehand Tempo Control' },
+      ],
+      specialty: [
+        { key: 'specialty_power', label: 'Specialty Power' },
+        { key: 'specialty_accuracy', label: 'Specialty Accuracy' },
+        { key: 'specialty_quick_release', label: 'Specialty Quick Release' },
+        { key: 'specialty_release_variations', label: 'Specialty Variations' },
+        { key: 'specialty_against_wind', label: 'Specialty vs Wind' },
+        { key: 'specialty_against_difficult_marks', label: 'Specialty vs Difficult Marks' },
+        { key: 'specialty_tempo_control', label: 'Specialty Tempo Control' },
+      ],
+      hucking: [
+        { key: 'hucking_confidence', label: 'Hucking Confidence' },
+        { key: 'hucking_shape_control', label: 'Hucking Shape Control' },
+        { key: 'hucking_tempo_control', label: 'Hucking Tempo Control' },
+        { key: 'hucking_placement', label: 'Hucking Placement' },
+      ],
+    },
+  },
+  defensive: [
+    { key: 'normal_marking', label: 'Normal Marking' },
+    { key: 'sideline_trap_marking', label: 'Sideline Trap Marking' },
+    { key: 'downfield_defending', label: 'Downfield Defending' },
+    { key: 'handler_defending', label: 'Handler Defending' },
+    { key: 'defensive_pattern_recognition', label: 'Pattern Recognition' },
+    { key: 'help_defense', label: 'Help Defense' },
+    { key: 'switching_on_defense', label: 'Switching on Defense' },
+    { key: 'zone_defense', label: 'Zone Defense' },
+    { key: 'defensive_mental_fortitude', label: 'Defensive Mental Fortitude' },
+  ],
+  mental: [
+    { key: 'mental_game', label: 'Mental Game' },
+    { key: 'feedback_implementation', label: 'Feedback Implementation' },
+    { key: 'defensive_strategy', label: 'Defensive Team Strategy' },
+    { key: 'offensive_strategy', label: 'Offensive Team Strategy' },
+  ],
+};
+
+export const RADAR_LABELS = [
+  'Mental',
+  'Physical',
+  'Cutting',
+  'Handling',
+  'Throwing',
+  'Defensive',
+] as const;
+
+export type RadarLabel = typeof RADAR_LABELS[number];
+
+// Additional exports for commonly used data
+export const THROW_COMPARISON_LABELS = [
+  'Backhand Power',
+  'Forehand Power',
+  'Specialty Power',
+  'Backhand Accuracy',
+  'Forehand Accuracy',
+  'Specialty Accuracy',
+] as const;
+
 
 File: src\contexts\AuthContext.js
 ================================================================================
@@ -3929,6 +4091,31 @@ function Dashboard() {
 export default Dashboard;
 
 
+File: src\hooks\useOutsideClick.ts
+================================================================================
+
+// src/hooks/useOutsideClick.ts
+import { useEffect } from 'react';
+
+const useOutsideClick = (
+  ref: React.RefObject<HTMLElement>,
+  callback: () => void
+) => {
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (ref.current && !ref.current.contains(event.target as Node)) {
+        callback();
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [ref, callback]);
+};
+
+export default useOutsideClick;
+
+
 File: src\hooks\usePreloadState.js
 ================================================================================
 
@@ -4185,6 +4372,104 @@ File: src\setupTests.js
 // expect(element).toHaveTextContent(/react/i)
 // learn more: https://github.com/testing-library/jest-dom
 import '@testing-library/jest-dom';
+
+
+File: src\types\athlete.ts
+================================================================================
+
+// src/types/athlete.ts
+
+// Base type for skills
+export interface Skill {
+  key: string;
+  label: string;
+}
+
+// Category data structure
+export interface CategoryData {
+  physical: Skill[];
+  offensive: {
+    cutting: Skill[];
+    handling: Skill[];
+    throwing: {
+      backhand: Skill[];
+      forehand: Skill[];
+      specialty: Skill[];
+      hucking: Skill[];
+    };
+  };
+  defensive: Skill[];
+  mental: Skill[];
+}
+
+// Average calculations
+export interface CategoryAverages {
+  mental: number;
+  physical: number;
+  cutting: number;
+  handling: number;
+  throwing: number;
+  defensive: number;
+  offensive: number;
+}
+
+// Athlete metadata
+export interface AthleteMetadata {
+  name: string;
+  email: string;
+}
+
+// Athlete skills as key-value pairs
+export interface AthleteSkills {
+  [key: string]: number;
+}
+
+// Complete athlete type
+export interface Athlete {
+  id: string;
+  metadata: AthleteMetadata;
+  skills: AthleteSkills;
+  growth_targets: string[];
+}
+
+// Props types for components
+export interface AthleteProps {
+  player: Athlete;
+}
+
+export interface AthleteSelectorProps {
+  athletes: Athlete[];
+  selectedAthleteId: string;
+  onSelectAthlete: (id: string) => void;
+}
+
+// State types
+export interface AthleteState {
+  athletes: Athlete[];
+  selectedAthleteId: string | null;
+  loading: boolean;
+  error: string | null;
+}
+
+// Response types for API calls
+export interface AthleteResponse {
+  success: boolean;
+  data: Athlete[];
+  error?: string;
+}
+
+// Utility type for skill categories
+export type SkillCategory = keyof CategoryData;
+
+// Type for tab values
+export type TabValue = 'home' | 'physical' | 'offensive' | 'defensive' | 'mental';
+
+// Config for radar chart
+export interface RadarConfig {
+  labels: string[];
+  dataValues: number[];
+  maxValue?: number;
+}
 
 
 File: src\types\components.d.ts
@@ -4723,107 +5008,38 @@ function App(): ReactElement {
 export default App;
 
 
-File: src\components\AthleteDropdown.jsx
+File: src\components\AthleteList.tsx
 ================================================================================
 
-// src/components/AthleteDropdown.jsx
-
-import React, { useState, useRef, useEffect } from 'react';
-import { ChevronDown } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
-
-const AthleteDropdown = ({ athletes, selectedAthleteId, onSelectAthlete }) => {
-  const [isOpen, setIsOpen] = useState(false);
-  const dropdownRef = useRef();
-
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (
-        dropdownRef.current &&
-        !dropdownRef.current.contains(event.target)
-      ) {
-        setIsOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
-  }, []);
-
-  // Get the selected athlete's name
-  const selectedAthlete = athletes.find(a => a.id === selectedAthleteId);
-
-  return (
-    <div className="absolute top-4 right-4 md:top-6 md:right-6" ref={dropdownRef}>
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center bg-gray-800 text-gray-300 hover:bg-gray-700 px-3 py-2 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500"
-        aria-haspopup="listbox"
-        aria-expanded={isOpen}
-      >
-        <span className="mr-2 text-sm">{selectedAthlete ? selectedAthlete.name : "Select Athlete"}</span>
-        <ChevronDown className="w-4 h-4" aria-hidden="true" />
-      </button>
-
-      <AnimatePresence>
-        {isOpen && (
-          <motion.div
-            className="mt-2 w-48 bg-gray-800 rounded-md shadow-lg z-30"
-            role="listbox"
-            aria-labelledby="athlete-dropdown"
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.95 }}
-            transition={{ duration: 0.2 }}
-          >
-            <ul className="py-1">
-              {athletes.map(athlete => (
-                <li key={athlete.id}>
-                  <button
-                    onClick={() => {
-                      onSelectAthlete(athlete.id);
-                      setIsOpen(false);
-                    }}
-                    className={`w-full text-left px-4 py-2 text-sm ${
-                      athlete.id === selectedAthleteId
-                        ? 'bg-gray-700 text-white'
-                        : 'text-gray-300 hover:bg-gray-700 hover:text-white'
-                    }`}
-                    role="option"
-                    aria-selected={athlete.id === selectedAthleteId}
-                  >
-                    {athlete.name}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  );
-};
-
-export default AthleteDropdown;
-
-
-File: src\components\AthleteList.jsx
-================================================================================
-
-// src/components/AthleteList.jsx
-
+// src/components/AthleteList.tsx
 import React from 'react';
 
-const AthleteList = ({ athletes }) => {
+interface Athlete {
+  id: string;
+  metadata: {
+    name: string;
+    email: string;
+    // Add other necessary fields if needed
+  };
+}
+
+interface AthleteListProps {
+  athletes: Athlete[];
+}
+
+const AthleteList: React.FC<AthleteListProps> = ({ athletes }) => {
+  if (athletes.length === 0) {
+    return <p>No athletes found.</p>;
+  }
+
   return (
     <div>
-      <h2>Athletes</h2>
-      <ul>
-        {athletes.map(athlete => (
-          <li key={athlete.id}>
-            <strong>{athlete.metadata.name}</strong> - {athlete.metadata.email}
+      <h2 className="text-xl font-semibold mb-4">Athletes</h2>
+      <ul className="space-y-2">
+        {athletes.map((athlete) => (
+          <li key={athlete.id} className="flex justify-between items-center p-2 bg-gray-800 rounded-md">
+            <span className="font-medium text-white">{athlete.metadata.name}</span>
+            <span className="text-gray-400">{athlete.metadata.email}</span>
           </li>
         ))}
       </ul>
@@ -5198,6 +5414,11 @@ const CategorySection = ({ title, skills, player }) => {
 export default CategorySection;
 
 
+File: src\components\Dropdown.tsx
+================================================================================
+
+
+
 File: src\components\ErrorBoundary.tsx
 ================================================================================
 
@@ -5376,91 +5597,136 @@ const FloatingActionButton = ({ onClick }) => {
 
 export default FloatingActionButton;
 
-File: src\components\HomeSection.jsx
+File: src\components\HomeSection.tsx
 ================================================================================
 
-// src/components/HomeSection.jsx
-
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, memo } from 'react';
+import type { Athlete, CategoryAverages } from '../types/athlete';
+import { RADAR_LABELS } from '../constants/categoryData';
 import RadarChart from './RadarChart';
 import SwipeableInsights from './SwipeableInsights';
 import SkillHierarchy from './SkillHierarchy';
 import { computeCategoryAverages } from '../utils/helpers';
 
-function HomeSection({ player }) {
-  const [averages, setAverages] = useState({
-    mental: 0,
-    physical: 0,
-    cutting: 0,
-    handling: 0,
-    throwing: 0,
-    defensive: 0,
-    offensive: 0,
-  });
+interface HomeSectionProps {
+  player: Athlete;
+}
+
+interface StatCardProps {
+  title: string;
+  content: React.ReactNode;
+  className?: string;
+  contentClassName?: string;
+}
+
+const initialAverages: CategoryAverages = {
+  mental: 0,
+  physical: 0,
+  cutting: 0,
+  handling: 0,
+  throwing: 0,
+  defensive: 0,
+  offensive: 0,
+};
+
+const StatCard = memo<StatCardProps>(({ 
+  title, 
+  content, 
+  className = '',
+  contentClassName = ''
+}) => (
+  <div className={`
+    bg-gray-800 
+    p-4 sm:p-5 
+    rounded-lg 
+    shadow-md 
+    flex 
+    flex-col 
+    h-full
+    ${className}
+  `}>
+    <h2 className="text-base sm:text-lg font-semibold text-gray-100 mb-2">
+      {title}
+    </h2>
+    <div className={`
+      flex-1 
+      w-full 
+      flex 
+      min-h-0
+      ${contentClassName}
+    `}>
+      {content}
+    </div>
+  </div>
+));
+
+StatCard.displayName = 'StatCard';
+
+const RadarChartSection = memo<{ 
+  labels: string[];
+  dataValues: number[];
+}>(({ labels, dataValues }) => (
+  <div className="w-full h-full min-h-[300px] sm:min-h-[350px] max-h-[400px]">
+    <RadarChart 
+      labels={labels} 
+      dataValues={dataValues} 
+    />
+  </div>
+));
+
+RadarChartSection.displayName = 'RadarChartSection';
+
+export const HomeSection: React.FC<HomeSectionProps> = ({ player }) => {
+  const [averages, setAverages] = useState<CategoryAverages>(initialAverages);
 
   useEffect(() => {
-    const avg = computeCategoryAverages(player);
-    setAverages(avg);
+    setAverages(computeCategoryAverages(player));
   }, [player]);
 
-  // Radar chart data for 6 categories
-  const radarLabels = ['Mental', 'Physical', 'Cutting', 'Handling', 'Throwing', 'Defense'];
-  const radarDataValues = [
-    averages.mental,
-    averages.physical,
-    averages.cutting,
-    averages.handling,
-    averages.throwing,
-    averages.defensive,
-  ];
+  const labels = React.useMemo(() => [...RADAR_LABELS], []);
+  
+  const radarDataValues = React.useMemo(() => 
+    labels.map(label => 
+      averages[label.toLowerCase() as keyof CategoryAverages]
+    ), [averages, labels]
+  );
 
   return (
-    <div className="mx-auto space-y-6">
-      {/* Key Insights (Top 3 strengths, etc.) */}
+    <div className="w-full mx-auto space-y-4 sm:space-y-6 px-3 sm:px-4 py-4">
       <SwipeableInsights 
         player={player} 
-        growthTargets={player.growth_targets || []}
+        growthTargets={player.growth_targets}
       />
 
-      {/* Main Stats Section */}
-      <div className="grid gap-6 grid-cols-1 lg:grid-cols-2">
-        {/* Radar Chart */}
-        <div className="bg-gray-800 p-5 rounded-lg shadow-md">
-          <h2 className="text-lg font-semibold text-gray-100 mb-4 mt-0">
-            Category Averages
-          </h2>
-          <div className="w-full flex justify-center">
-            <div className="w-full aspect-square max-w-[400px]">
-              <RadarChart labels={radarLabels} dataValues={radarDataValues} />
+      <div className="grid gap-4 sm:gap-6 grid-cols-1 lg:grid-cols-2 h-[500px]">
+        <StatCard
+          title="Category Averages"
+          contentClassName="items-center justify-center"
+          content={
+            <RadarChartSection 
+              labels={labels}
+              dataValues={radarDataValues} 
+            />
+          }
+        />
+
+        <StatCard
+          title="Detailed Breakdown"
+          contentClassName="overflow-hidden"
+          content={
+            <div className="w-full h-full overflow-y-auto overflow-x-hidden custom-scrollbar">
+              <div className="w-full h-full flex flex-col justify-between">
+                <SkillHierarchy player={player} />
+              </div>
             </div>
-          </div>
-        </div>
-
-        {/* Skill Hierarchy */}
-        <div className="bg-gray-800 p-5 rounded-lg shadow-md">
-          <h2 className="text-lg font-semibold text-gray-100 mb-4 mt-0">
-            Detailed Breakdown
-          </h2>
-          <div className="overflow-auto max-h-[400px] custom-scrollbar">
-            <SkillHierarchy player={player} />
-          </div>
-        </div>
-      </div>
-
-      {/* Additional Info or Future Sections */}
-      <div className="bg-gray-800 p-5 rounded-lg shadow-md">
-        <h2 className="text-lg font-semibold text-gray-100 mb-4">
-          Recent Progress
-        </h2>
-        <p className="text-gray-400 text-sm">
-          Progress tracking section coming soon...
-        </p>
+          }
+        />
       </div>
     </div>
   );
-}
+};
 
-export default HomeSection;
+export default memo(HomeSection);
 
 File: src\components\InsightsSection.jsx
 ================================================================================
@@ -6222,10 +6488,10 @@ const PWADebug = () => {
 
 export default PWADebug;
 
-File: src\components\RadarChart.jsx
+File: src\components\RadarChart.tsx
 ================================================================================
 
-// src/components/RadarChart.jsx
+// src/components/RadarChart.tsx
 
 import React from 'react';
 import { Radar } from 'react-chartjs-2';
@@ -6237,6 +6503,8 @@ import {
   Filler,
   Tooltip,
   Legend,
+  ChartOptions,
+  ChartData,
 } from 'chart.js';
 
 ChartJS.register(
@@ -6248,15 +6516,23 @@ ChartJS.register(
   Legend
 );
 
+interface RadarChartProps {
+  labels: string[];
+  dataValues: number[];
+  onDataPointClick?: (dataPoint: {
+    label: string;
+    value: number;
+    index: number;
+    datasetIndex: number;
+  }) => void;
+}
+
 /**
  * RadarChart Component
- * @param {Object} props - Component props
- * @param {Array} props.labels - Labels for the radar chart axes
- * @param {Array} props.dataValues - Data values for each axis
- * @param {Function} props.onDataPointClick - Callback when a data point is clicked
+ * @param {RadarChartProps} props - Component props
  */
-const RadarChart = ({ labels, dataValues, onDataPointClick }) => {
-  const data = {
+const RadarChart: React.FC<RadarChartProps> = ({ labels, dataValues, onDataPointClick }) => {
+  const data: ChartData<'radar', number[], string> = {
     labels,
     datasets: [
       {
@@ -6270,13 +6546,13 @@ const RadarChart = ({ labels, dataValues, onDataPointClick }) => {
         pointHoverBackgroundColor: '#fff',
         pointHoverBorderColor: 'rgba(16, 185, 129, 1)',
         pointRadius: 3, // Reduced from 5 to 3
-        pointHoverRadius: 7, // Kept or adjusted as needed
-        pointHitRadius: 10, // Maintained for consistent touch area
+        pointHoverRadius: 7, // Adjust as needed
+        pointHitRadius: 10, // Consistent touch area
       },
     ],
   };
 
-  const options = {
+  const options: ChartOptions<'radar'> = {
     responsive: true,
     maintainAspectRatio: false, // Allows the chart to fill the container
     scales: {
@@ -6339,10 +6615,10 @@ const RadarChart = ({ labels, dataValues, onDataPointClick }) => {
     },
     // Optional: Change cursor to pointer on hover
     onHover: (event, elements) => {
-      const target = event.native.target;
-      if (elements.length > 0) {
+      const target = event.native?.target as HTMLElement;
+      if (elements.length > 0 && target) {
         target.style.cursor = 'pointer';
-      } else {
+      } else if (target) {
         target.style.cursor = 'default';
       }
     },
@@ -6815,96 +7091,129 @@ const SkillCard = ({ label, value }) => {
 export default SkillCard;
 
 
-File: src\components\SkillHierarchy.jsx
+File: src\components\SkillHierarchy.tsx
 ================================================================================
 
-// src/components/SkillHierarchy.jsx
-import React from 'react';
-import { ChevronRight } from 'lucide-react';
+import React, { memo } from 'react';
+import { ChevronRight, AlertCircle } from 'lucide-react';
 import { averageOfKeys, computeCategoryAverages, computeOverallScore } from '../utils/helpers';
+import type { Athlete } from '../types/athlete';
 
-const SkillBar = ({ value, maxValue = 10 }) => (
-  <div className="w-24 bg-gray-700 rounded-full h-1.5 overflow-hidden">
-    <div
-      className="h-1.5 bg-emerald-500 transition-all duration-300"
-      style={{ width: `${(value / maxValue) * 100}%` }}
-    />
-  </div>
-);
+interface SkillBarProps {
+  value: number;
+  maxValue?: number;
+}
 
-const SkillNode = ({ label, value, depth = 0, children }) => {
-  const hasChildren = React.Children.count(children) > 0;
+interface SkillNodeProps {
+  label: string;
+  value: number;
+  depth?: number;
+  children?: React.ReactNode;
+}
+
+const SkillBar = memo<SkillBarProps>(({ value, maxValue = 10 }) => {
+  const isLowScore = value < 5;
   
   return (
-    <div className="space-y-2">
-      <div className={`flex items-center gap-3 ${hasChildren ? 'mb-2' : ''}`}>
-        {depth > 0 && (
-          <div className="flex items-center">
-            <div 
-              className="w-4 h-px bg-gray-700"
-              style={{ marginLeft: `${(depth - 1) * 16}px` }}
-            />
-            <ChevronRight className="w-4 h-4 text-gray-600" />
+    <div className="w-full h-1.5 bg-gray-700/50 rounded-full overflow-hidden">
+      <div
+        className={`h-full transition-all duration-300 ${isLowScore ? 'bg-orange-500' : 'bg-emerald-500'}`}
+        style={{ width: `${(value / maxValue) * 100}%` }}
+      />
+    </div>
+  );
+});
+
+SkillBar.displayName = 'SkillBar';
+
+const SkillNode = memo<SkillNodeProps>(({ label, value, depth = 0, children }) => {
+  const hasChildren = React.Children.count(children) > 0;
+  const isLowScore = value < 5;
+  
+  return (
+    <div className="flex-1 flex flex-col">
+      <div className={`
+        ${depth === 0 ? 'bg-gray-800/40 rounded-lg py-2 px-3' : 'py-1.5 px-3'}
+      `}>
+        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+          {depth > 0 && (
+            <div className="flex items-center flex-shrink-0">
+              <div 
+                className="w-px h-full absolute left-0 top-0 bottom-0 bg-gray-700/30"
+                style={{ left: `${depth * 12}px` }}
+              />
+              <div className="ml-6">
+                <ChevronRight className="w-3 h-3 text-gray-600" />
+              </div>
+            </div>
+          )}
+          
+          <div className="flex-1 flex items-center gap-4 min-w-0">
+            <span className={`
+              font-medium truncate
+              ${depth === 0 ? 'text-base text-white' : 'text-sm text-gray-300'}
+            `}>
+              {label}
+            </span>
+            
+            {isLowScore && (
+              <AlertCircle className="w-3 h-3 text-orange-500 flex-shrink-0" />
+            )}
           </div>
-        )}
-        
-        <div className="flex-1 flex items-center justify-between">
-          <span className="text-sm font-medium text-gray-300">{label}</span>
-          <div className="flex items-center gap-3">
-            <SkillBar value={value} />
-            <span className="text-sm font-semibold text-emerald-400 w-8">
+
+          <div className="flex items-center gap-3 flex-shrink-0">
+            <div className="w-24 sm:w-32">
+              <SkillBar value={value} />
+            </div>
+            <span className={`
+              text-xs sm:text-sm font-medium w-8 text-right
+              ${isLowScore ? 'text-orange-500' : 'text-emerald-500'}
+            `}>
               {value.toFixed(1)}
             </span>
           </div>
         </div>
       </div>
-      
+
       {hasChildren && (
-        <div className="space-y-2">
+        <div className="flex-1 flex flex-col relative ml-2 sm:ml-3">
           {children}
         </div>
       )}
     </div>
   );
-};
+});
 
-const SkillHierarchy = ({ player }) => {
-  // Get all category averages using helper function
+SkillNode.displayName = 'SkillNode';
+
+const SkillHierarchy: React.FC<{ player: Athlete }> = ({ player }) => {
   const categoryAverages = computeCategoryAverages(player);
   const overallScore = computeOverallScore(player);
 
-  // Compute throwing subcategory averages (not included in helpers)
-  const throwingSubcategories = {
-    backhand: [
+  const throwingAverages = {
+    backhand: averageOfKeys(player, [
       'backhand_power', 'backhand_accuracy', 'backhand_quick_release',
       'backhand_release_variations', 'backhand_against_wind',
       'backhand_against_difficult_marks', 'backhand_tempo_control'
-    ],
-    forehand: [
+    ]),
+    forehand: averageOfKeys(player, [
       'forehand_power', 'forehand_accuracy', 'forehand_quick_release',
       'forehand_release_variations', 'forehand_against_wind',
       'forehand_against_difficult_marks', 'forehand_tempo_control'
-    ],
-    specialty: [
+    ]),
+    specialty: averageOfKeys(player, [
       'specialty_power', 'specialty_accuracy', 'specialty_quick_release',
       'specialty_release_variations', 'specialty_against_wind',
       'specialty_against_difficult_marks', 'specialty_tempo_control'
-    ],
-    hucking: [
+    ]),
+    hucking: averageOfKeys(player, [
       'hucking_confidence', 'hucking_shape_control',
       'hucking_tempo_control', 'hucking_placement'
-    ]
-  };
-
-  const throwingAverages = {
-    backhand: averageOfKeys(player, throwingSubcategories.backhand),
-    forehand: averageOfKeys(player, throwingSubcategories.forehand),
-    specialty: averageOfKeys(player, throwingSubcategories.specialty),
-    hucking: averageOfKeys(player, throwingSubcategories.hucking)
+    ])
   };
 
   return (
-    <div className="space-y-4">
+    <div className="h-full flex flex-col justify-between">
       <SkillNode label="Overall" value={overallScore}>
         <SkillNode label="Physical" value={categoryAverages.physical} depth={1} />
         <SkillNode label="Mental" value={categoryAverages.mental} depth={1} />
@@ -6924,18 +7233,43 @@ const SkillHierarchy = ({ player }) => {
   );
 };
 
-export default SkillHierarchy;
+export default memo(SkillHierarchy);
 
-File: src\components\SwipeableInsights.jsx
+File: src\components\SwipeableInsights.tsx
 ================================================================================
 
-import React, { useState, useEffect, useRef } from 'react';
-import { motion, AnimatePresence, useAnimation } from 'framer-motion';
+// src/components/SwipeableInsights.tsx
+import React, { useState, useEffect, useRef, FC } from 'react';
+import { motion, AnimatePresence, useAnimation, PanInfo } from 'framer-motion';
+import type { Athlete } from '../types/athlete';
 
+// Constants
 const SWIPE_THRESHOLD = 30;
 const VELOCITY_THRESHOLD = 200;
 
-const InsightsCard = ({ title, data = [], subtitle }) => (
+// Type definitions
+type SkillEntry = [string, number];
+type SkillPair = [string, number];
+
+interface SwipeableInsightsProps {
+  player: Athlete;
+  growthTargets?: string[];
+}
+
+interface InsightCardData {
+  title: string;
+  data: SkillPair[];
+  subtitle?: string | null;
+}
+
+interface InsightsCardProps {
+  title: string;
+  data: SkillPair[];
+  subtitle?: string | null;
+}
+
+// InsightsCard Component
+const InsightsCard: FC<InsightsCardProps> = ({ title, data = [], subtitle }) => (
   <div className="bg-gray-800 p-4 rounded-lg shadow-md w-full">
     <div className="text-gray-300 text-xs font-bold uppercase tracking-widest mb-2">
       <span className="font-semibold text-emerald-400">{title}</span>
@@ -6958,95 +7292,96 @@ const InsightsCard = ({ title, data = [], subtitle }) => (
   </div>
 );
 
-const SwipeableInsights = ({ player, growthTargets = [] }) => {
+const SwipeableInsights: FC<SwipeableInsightsProps> = ({ player, growthTargets = [] }) => {
+  const [currentIndex, setCurrentIndex] = useState<number>(0);
+  const [isDragging, setIsDragging] = useState<boolean>(false);
+  const controls = useAnimation();
+  const [containerWidth, setContainerWidth] = useState<number>(0);
+  const containerRef = useRef<HTMLDivElement>(null);
 
-    const [currentIndex, setCurrentIndex] = useState(0);
-    const [isDragging, setIsDragging] = useState(false);
-    const controls = useAnimation();
-    const [containerWidth, setContainerWidth] = useState(0);
-    const containerRef = useRef(null);
-  
-    const growthTargetPairs = growthTargets
-    .map(targetKey => [
-      targetKey.replace(/_/g, ' '),  
-      player.skills[targetKey] || 0  // Access skills through player.skills
+  // Prepare growth target pairs
+  const growthTargetPairs: SkillPair[] = growthTargets
+    .map((targetKey): SkillPair => [
+      targetKey.replace(/_/g, ' '),
+      player.skills[targetKey] || 0
     ])
-    .filter(([_, value]) => typeof value === 'number'); 
-  
-    useEffect(() => {
-      const updateWidth = () => {
-        if (containerRef.current) {
-          setContainerWidth(containerRef.current.offsetWidth);
-        }
-      };
-      
-      updateWidth();
-      const resizeObserver = new ResizeObserver(updateWidth);
-      
-      if (containerRef.current) {
-        resizeObserver.observe(containerRef.current);
-      }
-      
-      return () => resizeObserver.disconnect();
-    }, []);
-  
-    const getSortedSkills = () => {
-        // Change to access player.skills instead of player directly
-        const skillEntries = Object.entries(player.skills)
-          .filter(([key, val]) => typeof val === 'number' && !key.includes('id'))
-          .sort((a, b) => b[1] - a[1]);
-        return skillEntries;
-      };
-  
-    // Call getSortedSkills once and store result
-    const sortedSkills = getSortedSkills();
-  
-    const cards = [
-      {
-        title: 'Current Growth Targets',
-        data: growthTargetPairs,
-        subtitle: growthTargetPairs.length === 0 ? 'No growth targets set' : null
-      },
-      {
-        title: 'Top 3 Strengths',
-        data: sortedSkills.slice(0, 3)
-      },
-      {
-        title: 'Areas for Improvement',
-        data: [...sortedSkills].reverse().slice(0, 3)
-      }
-    ];
+    .filter((pair): pair is SkillPair => typeof pair[1] === 'number');
 
-  const snapToIndex = (index) => {
-    controls.start({
-      x: -index * containerWidth,
-      transition: {
-        type: "spring",
-        stiffness: 400,
-        damping: 40,
-        mass: 0.8,
-        restSpeed: 0.5,
-        restDelta: 0.5
+  useEffect(() => {
+    const updateWidth = () => {
+      if (containerRef.current) {
+        setContainerWidth(containerRef.current.offsetWidth);
       }
-    }).then(() => {
-      setIsDragging(false);
-    });
+    };
+
+    updateWidth();
+    const resizeObserver = new ResizeObserver(updateWidth);
+
+    if (containerRef.current) {
+      resizeObserver.observe(containerRef.current);
+    }
+
+    return () => resizeObserver.disconnect();
+  }, []);
+
+  const getSortedSkills = (): SkillPair[] => {
+    return Object.entries(player.skills)
+      .filter((entry): entry is SkillEntry => 
+        typeof entry[1] === 'number' && !entry[0].includes('id')
+      )
+      .sort((a, b) => b[1] - a[1]);
+  };
+
+  const sortedSkills = getSortedSkills();
+
+  const cards: InsightCardData[] = [
+    {
+      title: 'Current Growth Targets',
+      data: growthTargetPairs,
+      subtitle: growthTargetPairs.length === 0 ? 'No growth targets set' : null,
+    },
+    {
+      title: 'Top 3 Strengths',
+      data: sortedSkills.slice(0, 3),
+    },
+    {
+      title: 'Areas for Improvement',
+      data: [...sortedSkills].reverse().slice(0, 3),
+    },
+  ];
+
+  const snapToIndex = (index: number) => {
+    controls
+      .start({
+        x: -index * containerWidth,
+        transition: {
+          type: 'spring',
+          stiffness: 400,
+          damping: 40,
+          mass: 0.8,
+          restSpeed: 0.5,
+          restDelta: 0.5,
+        },
+      })
+      .then(() => {
+        setIsDragging(false);
+      });
   };
 
   const handleDragStart = () => {
     setIsDragging(true);
   };
 
-  const handleDragEnd = (event, info) => {
+  const handleDragEnd = (event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
     const swipe = info.offset.x;
     const velocity = info.velocity.x;
-    
+
     const shouldSwipe = Math.abs(swipe) > SWIPE_THRESHOLD || Math.abs(velocity) > VELOCITY_THRESHOLD;
-    
+
     if (shouldSwipe) {
       const direction = swipe > 0 ? -1 : 1;
       const nextIndex = currentIndex + direction;
-      
+
       if (nextIndex >= 0 && nextIndex < cards.length) {
         setCurrentIndex(nextIndex);
         snapToIndex(nextIndex);
@@ -7058,7 +7393,7 @@ const SwipeableInsights = ({ player, growthTargets = [] }) => {
     }
   };
 
-  const handleDotClick = (index) => {
+  const handleDotClick = (index: number) => {
     if (!isDragging) {
       setCurrentIndex(index);
       snapToIndex(index);
@@ -7067,11 +7402,12 @@ const SwipeableInsights = ({ player, growthTargets = [] }) => {
 
   return (
     <div className="mb-6">
-      <h2 className="text-xl font-bold uppercase mb-3 text-gray-100">
-        Key Insights
-      </h2>
-      
-      <div ref={containerRef} className="relative insights-container overflow-hidden bg-gray-800 rounded-lg shadow-md">
+      <h2 className="text-xl font-bold uppercase mb-3 text-gray-100">Key Insights</h2>
+
+      <div
+        ref={containerRef}
+        className="relative insights-container overflow-hidden bg-gray-800 rounded-lg shadow-md"
+      >
         <AnimatePresence initial={false}>
           <motion.div
             className="flex"
@@ -7079,7 +7415,7 @@ const SwipeableInsights = ({ player, growthTargets = [] }) => {
             drag="x"
             dragConstraints={{
               left: -containerWidth * (cards.length - 1),
-              right: 0
+              right: 0,
             }}
             dragElastic={0.1}
             dragMomentum={false}
@@ -7094,25 +7430,21 @@ const SwipeableInsights = ({ player, growthTargets = [] }) => {
                 className="flex-shrink-0"
                 style={{ width: containerWidth }}
               >
-                <InsightsCard 
-                  {...card}
-                  key={`insight-${index}`} 
-                />
+                <InsightsCard {...card} />
               </div>
             ))}
           </motion.div>
         </AnimatePresence>
       </div>
 
-      {/* Navigation Dots */}
       <div className="flex justify-center mt-4 space-x-3">
         {cards.map((_, index) => (
           <button
             key={`dot-${index}`}
             onClick={() => handleDotClick(index)}
             className={`w-2 h-2 rounded-full transition-all duration-200 ${
-              index === currentIndex 
-                ? 'bg-emerald-400 scale-110' 
+              index === currentIndex
+                ? 'bg-emerald-400 scale-110'
                 : 'bg-gray-600 hover:bg-gray-500'
             }`}
             disabled={isDragging}
@@ -7358,6 +7690,121 @@ export const getFirebaseInstances = () => {
 
 // Export individual services for backward compatibility
 export const { app, auth, db } = getFirebaseInstances();
+
+File: src\constants\categoryData.ts
+================================================================================
+
+// src/constants/categoryData.ts
+import { CategoryData } from '../types/athlete';
+
+export const CATEGORY_DATA: CategoryData = {
+  physical: [
+    { key: 'speed_explosiveness', label: 'Speed & Explosiveness' },
+    { key: 'endurance', label: 'Endurance' },
+    { key: 'vertical_leap', label: 'Vertical Leap' },
+    { key: 'change_of_direction', label: 'Change of Direction' },
+    { key: 'boxing_out', label: 'Boxing Out' },
+    { key: 'laying_out', label: 'Laying Out' },
+    { key: 'recovery', label: 'Recovery' },
+    { key: 'flexibility_mobility', label: 'Flexibility & Mobility' },
+    { key: 'injury_prevention', label: 'Injury Prevention' },
+  ],
+  offensive: {
+    cutting: [
+      { key: 'angles', label: 'Angles' },
+      { key: 'fakes_footwork', label: 'Fakes & Footwork' },
+      { key: 'timing_field_vision', label: 'Timing & Field Vision' },
+      { key: 'decisiveness', label: 'Decisiveness' },
+      { key: 'catching', label: 'Catching' },
+      { key: 'flow_awareness', label: 'Flow Awareness' },
+      { key: 'isolation_cutting', label: 'Isolation Cutting' },
+      { key: 'continuation_cutting', label: 'Continuation Cutting' },
+    ],
+    handling: [
+      { key: 'handler_movement', label: 'Handler Movement' },
+      { key: 'poise_with_disc', label: 'Poise w/ Disc' },
+      { key: 'breaking_the_mark', label: 'Breaking the Mark' },
+      { key: 'resetting_from_trap_sideline', label: 'Reset from Trap' },
+      { key: 'decision_making_vision', label: 'Decision Making & Vision' },
+      { key: 'offensive_pattern_recognition', label: 'Pattern Recognition' },
+      { key: 'throw_and_go', label: 'Throw & Go' },
+    ],
+    throwing: {
+      backhand: [
+        { key: 'backhand_power', label: 'Backhand Power' },
+        { key: 'backhand_accuracy', label: 'Backhand Accuracy' },
+        { key: 'backhand_quick_release', label: 'Backhand Quick Release' },
+        { key: 'backhand_release_variations', label: 'Backhand Variations' },
+        { key: 'backhand_against_wind', label: 'Backhand vs Wind' },
+        { key: 'backhand_against_difficult_marks', label: 'Backhand vs Difficult Marks' },
+        { key: 'backhand_tempo_control', label: 'Backhand Tempo Control' },
+      ],
+      forehand: [
+        { key: 'forehand_power', label: 'Forehand Power' },
+        { key: 'forehand_accuracy', label: 'Forehand Accuracy' },
+        { key: 'forehand_quick_release', label: 'Forehand Quick Release' },
+        { key: 'forehand_release_variations', label: 'Forehand Variations' },
+        { key: 'forehand_against_wind', label: 'Forehand vs Wind' },
+        { key: 'forehand_against_difficult_marks', label: 'Forehand vs Difficult Marks' },
+        { key: 'forehand_tempo_control', label: 'Forehand Tempo Control' },
+      ],
+      specialty: [
+        { key: 'specialty_power', label: 'Specialty Power' },
+        { key: 'specialty_accuracy', label: 'Specialty Accuracy' },
+        { key: 'specialty_quick_release', label: 'Specialty Quick Release' },
+        { key: 'specialty_release_variations', label: 'Specialty Variations' },
+        { key: 'specialty_against_wind', label: 'Specialty vs Wind' },
+        { key: 'specialty_against_difficult_marks', label: 'Specialty vs Difficult Marks' },
+        { key: 'specialty_tempo_control', label: 'Specialty Tempo Control' },
+      ],
+      hucking: [
+        { key: 'hucking_confidence', label: 'Hucking Confidence' },
+        { key: 'hucking_shape_control', label: 'Hucking Shape Control' },
+        { key: 'hucking_tempo_control', label: 'Hucking Tempo Control' },
+        { key: 'hucking_placement', label: 'Hucking Placement' },
+      ],
+    },
+  },
+  defensive: [
+    { key: 'normal_marking', label: 'Normal Marking' },
+    { key: 'sideline_trap_marking', label: 'Sideline Trap Marking' },
+    { key: 'downfield_defending', label: 'Downfield Defending' },
+    { key: 'handler_defending', label: 'Handler Defending' },
+    { key: 'defensive_pattern_recognition', label: 'Pattern Recognition' },
+    { key: 'help_defense', label: 'Help Defense' },
+    { key: 'switching_on_defense', label: 'Switching on Defense' },
+    { key: 'zone_defense', label: 'Zone Defense' },
+    { key: 'defensive_mental_fortitude', label: 'Defensive Mental Fortitude' },
+  ],
+  mental: [
+    { key: 'mental_game', label: 'Mental Game' },
+    { key: 'feedback_implementation', label: 'Feedback Implementation' },
+    { key: 'defensive_strategy', label: 'Defensive Team Strategy' },
+    { key: 'offensive_strategy', label: 'Offensive Team Strategy' },
+  ],
+};
+
+export const RADAR_LABELS = [
+  'Mental',
+  'Physical',
+  'Cutting',
+  'Handling',
+  'Throwing',
+  'Defensive',
+] as const;
+
+export type RadarLabel = typeof RADAR_LABELS[number];
+
+// Additional exports for commonly used data
+export const THROW_COMPARISON_LABELS = [
+  'Backhand Power',
+  'Forehand Power',
+  'Specialty Power',
+  'Backhand Accuracy',
+  'Forehand Accuracy',
+  'Specialty Accuracy',
+] as const;
+
 
 File: src\contexts\AuthContext.js
 ================================================================================
@@ -7775,6 +8222,31 @@ function Dashboard() {
 export default Dashboard;
 
 
+File: src\hooks\useOutsideClick.ts
+================================================================================
+
+// src/hooks/useOutsideClick.ts
+import { useEffect } from 'react';
+
+const useOutsideClick = (
+  ref: React.RefObject<HTMLElement>,
+  callback: () => void
+) => {
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (ref.current && !ref.current.contains(event.target as Node)) {
+        callback();
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [ref, callback]);
+};
+
+export default useOutsideClick;
+
+
 File: src\hooks\usePreloadState.js
 ================================================================================
 
@@ -8031,6 +8503,104 @@ File: src\setupTests.js
 // expect(element).toHaveTextContent(/react/i)
 // learn more: https://github.com/testing-library/jest-dom
 import '@testing-library/jest-dom';
+
+
+File: src\types\athlete.ts
+================================================================================
+
+// src/types/athlete.ts
+
+// Base type for skills
+export interface Skill {
+  key: string;
+  label: string;
+}
+
+// Category data structure
+export interface CategoryData {
+  physical: Skill[];
+  offensive: {
+    cutting: Skill[];
+    handling: Skill[];
+    throwing: {
+      backhand: Skill[];
+      forehand: Skill[];
+      specialty: Skill[];
+      hucking: Skill[];
+    };
+  };
+  defensive: Skill[];
+  mental: Skill[];
+}
+
+// Average calculations
+export interface CategoryAverages {
+  mental: number;
+  physical: number;
+  cutting: number;
+  handling: number;
+  throwing: number;
+  defensive: number;
+  offensive: number;
+}
+
+// Athlete metadata
+export interface AthleteMetadata {
+  name: string;
+  email: string;
+}
+
+// Athlete skills as key-value pairs
+export interface AthleteSkills {
+  [key: string]: number;
+}
+
+// Complete athlete type
+export interface Athlete {
+  id: string;
+  metadata: AthleteMetadata;
+  skills: AthleteSkills;
+  growth_targets: string[];
+}
+
+// Props types for components
+export interface AthleteProps {
+  player: Athlete;
+}
+
+export interface AthleteSelectorProps {
+  athletes: Athlete[];
+  selectedAthleteId: string;
+  onSelectAthlete: (id: string) => void;
+}
+
+// State types
+export interface AthleteState {
+  athletes: Athlete[];
+  selectedAthleteId: string | null;
+  loading: boolean;
+  error: string | null;
+}
+
+// Response types for API calls
+export interface AthleteResponse {
+  success: boolean;
+  data: Athlete[];
+  error?: string;
+}
+
+// Utility type for skill categories
+export type SkillCategory = keyof CategoryData;
+
+// Type for tab values
+export type TabValue = 'home' | 'physical' | 'offensive' | 'defensive' | 'mental';
+
+// Config for radar chart
+export interface RadarConfig {
+  labels: string[];
+  dataValues: number[];
+  maxValue?: number;
+}
 
 
 File: src\types\components.d.ts

@@ -1,14 +1,47 @@
-// src/components/RadialTabs.jsx
-
 import React from 'react';
 import { motion } from 'framer-motion';
 import { Home, Brain, Shield, Sword, Activity } from 'lucide-react';
 
+export type TabValue = 'home' | 'physical' | 'offensive' | 'defensive' | 'mental';
+
+// Props interfaces
+interface RadialTabsProps {
+  activeTab: TabValue;
+  onChangeTab: (tab: TabValue) => void;
+  averages?: Record<string, number>;
+}
+
+interface RadialProgressProps {
+  value?: number;
+  isActive: boolean;
+  children: React.ReactNode;
+}
+
+interface TabButtonProps {
+  isActive: boolean;
+  onClick: () => void;
+  icon: React.ReactNode;
+  label: string;
+  score?: number;
+}
+
+interface Tab {
+  value: TabValue;
+  label: string;
+  icon: React.ReactNode;
+  score: number;
+}
+
 // Utility to merge class names conditionally
-const cn = (...classes) => classes.filter(Boolean).join(' ');
+const cn = (...classes: (string | boolean | undefined)[]): string => 
+  classes.filter(Boolean).join(' ');
 
 // Circular progress component with an icon in the center
-const RadialProgress = ({ value = 0, isActive, children }) => {
+const RadialProgress: React.FC<RadialProgressProps> = ({ 
+  value = 0, 
+  isActive, 
+  children 
+}) => {
   const percentage = Math.min(Math.max((value / 10) * 100, 0), 100);
   
   return (
@@ -54,7 +87,13 @@ const RadialProgress = ({ value = 0, isActive, children }) => {
 };
 
 // Each radial tab button
-const TabButton = ({ isActive, onClick, icon, label, score = 0 }) => {
+const TabButton: React.FC<TabButtonProps> = ({ 
+  isActive, 
+  onClick, 
+  icon, 
+  label, 
+  score = 0 
+}) => {
   return (
     <motion.button
       onClick={onClick}
@@ -77,12 +116,18 @@ const TabButton = ({ isActive, onClick, icon, label, score = 0 }) => {
 };
 
 // Radial Tabs Navigation Component
-const RadialTabs = ({ activeTab = 'home', onChangeTab = () => {}, averages = {} }) => {
+const RadialTabs: React.FC<RadialTabsProps> = ({ 
+  activeTab = 'home', 
+  onChangeTab, 
+  averages = {} 
+}) => {
   // Safely get the score for each tab
-  const getScore = (key) => (averages && typeof averages[key] === 'number') ? averages[key] : 0;
+  const getScore = (key: string): number => {
+    return (averages && typeof averages[key] === 'number') ? averages[key] : 0;
+  };
 
   // Tabs Configuration
-  const TABS = [
+  const TABS: Tab[] = [
     { value: 'home', label: 'Overview', icon: <Home className="w-5 h-5" />, score: getScore('home') },
     { value: 'physical', label: 'Physical', icon: <Activity className="w-5 h-5" />, score: getScore('physical') },
     { value: 'offensive', label: 'Offensive', icon: <Sword className="w-5 h-5" />, score: getScore('offensive') },

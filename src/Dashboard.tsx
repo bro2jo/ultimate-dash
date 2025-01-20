@@ -11,30 +11,38 @@ import { SyncManager } from './utils/sync';
 import { InstallPrompt } from './components/InstallPrompt';
 import RoadmapModal from './components/RoadmapModal';
 import FloatingActionButton from './components/FloatingActionButton';
-import './index.css';
 import { fetchAthletes } from './services/athleteService';
 import { LoadingState } from './components/LoadingState';
+import { CATEGORY_DATA } from './constants/categoryData';
+import type { Athlete } from './types/athlete';
 
-function Dashboard() {
+type TabValue = 'home' | 'physical' | 'offensive' | 'defensive' | 'mental';
+
+interface TabAverages {
+  [key: string]: number;
+}
+
+const Dashboard: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const [isOnline, setIsOnline] = useState(navigator.onLine);
-  const [syncPending, setSyncPending] = useState(false);
-  const [isRoadmapOpen, setRoadmapOpen] = useState(false);
+  const [isOnline, setIsOnline] = useState<boolean>(navigator.onLine);
+  const [isRoadmapOpen, setRoadmapOpen] = useState<boolean>(false);
 
   // Athlete selection
-  const [selectedAthleteId, setSelectedAthleteId] = useState(null);
+  const [selectedAthleteId, setSelectedAthleteId] = useState<string | null>(null);
+  const [athletes, setAthletes] = useState<Athlete[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
 
-  // Data fetching states
-  const [athletes, setAthletes] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  // Tab management
+  const [activeTab, setActiveTab] = useState<TabValue>('home');
+  const [averages, setAverages] = useState<TabAverages>({});
 
   // Fetch athletes from Firestore
   useEffect(() => {
     const getAthletes = async () => {
       try {
-        const data = await fetchAthletes();
+        const data: Athlete[] = await fetchAthletes();
         setAthletes(data);
         setLoading(false);
 
@@ -66,99 +74,7 @@ function Dashboard() {
   // Current selected athlete
   const selectedAthlete = athletes.find(a => a.id === selectedAthleteId);
 
-  // Data grouping for categories
-  const getCategoryData = (athlete) => ({
-    physical: [
-      { key: 'speed_explosiveness', label: 'Speed & Explosiveness' },
-      { key: 'endurance', label: 'Endurance' },
-      { key: 'vertical_leap', label: 'Vertical Leap' },
-      { key: 'change_of_direction', label: 'Change of Direction' },
-      { key: 'boxing_out', label: 'Boxing Out' },
-      { key: 'laying_out', label: 'Laying Out' },
-      { key: 'recovery', label: 'Recovery' },
-      { key: 'flexibility_mobility', label: 'Flexibility & Mobility' },
-      { key: 'injury_prevention', label: 'Injury Prevention' },
-    ],
-    offensive: {
-      cutting: [
-        { key: 'angles', label: 'Angles' },
-        { key: 'fakes_footwork', label: 'Fakes & Footwork' },
-        { key: 'timing_field_vision', label: 'Timing & Field Vision' },
-        { key: 'decisiveness', label: 'Decisiveness' },
-        { key: 'catching', label: 'Catching' },
-        { key: 'flow_awareness', label: 'Flow Awareness' },
-        { key: 'isolation_cutting', label: 'Isolation Cutting' },
-        { key: 'continuation_cutting', label: 'Continuation Cutting' },
-      ],
-      handling: [
-        { key: 'handler_movement', label: 'Handler Movement' },
-        { key: 'poise_with_disc', label: 'Poise w/ Disc' },
-        { key: 'breaking_the_mark', label: 'Breaking the Mark' },
-        { key: 'resetting_from_trap_sideline', label: 'Reset from Trap' },
-        { key: 'decision_making_vision', label: 'Decision Making & Vision' },
-        { key: 'offensive_pattern_recognition', label: 'Pattern Recognition' },
-        { key: 'throw_and_go', label: 'Throw & Go' },
-      ],
-      throwing: {
-        backhand: [
-          { key: 'backhand_power', label: 'Backhand Power' },
-          { key: 'backhand_accuracy', label: 'Backhand Accuracy' },
-          { key: 'backhand_quick_release', label: 'Backhand Quick Release' },
-          { key: 'backhand_release_variations', label: 'Backhand Variations' },
-          { key: 'backhand_against_wind', label: 'Backhand vs Wind' },
-          { key: 'backhand_against_difficult_marks', label: 'Backhand vs Difficult Marks' },
-          { key: 'backhand_tempo_control', label: 'Backhand Tempo Control' },
-        ],
-        forehand: [
-          { key: 'forehand_power', label: 'Forehand Power' },
-          { key: 'forehand_accuracy', label: 'Forehand Accuracy' },
-          { key: 'forehand_quick_release', label: 'Forehand Quick Release' },
-          { key: 'forehand_release_variations', label: 'Forehand Variations' },
-          { key: 'forehand_against_wind', label: 'Forehand vs Wind' },
-          { key: 'forehand_against_difficult_marks', label: 'Forehand vs Difficult Marks' },
-          { key: 'forehand_tempo_control', label: 'Forehand Tempo Control' },
-        ],
-        specialty: [
-          { key: 'specialty_power', label: 'Specialty Power' },
-          { key: 'specialty_accuracy', label: 'Specialty Accuracy' },
-          { key: 'specialty_quick_release', label: 'Specialty Quick Release' },
-          { key: 'specialty_release_variations', label: 'Specialty Variations' },
-          { key: 'specialty_against_wind', label: 'Specialty vs Wind' },
-          { key: 'specialty_against_difficult_marks', label: 'Specialty vs Difficult Marks' },
-          { key: 'specialty_tempo_control', label: 'Specialty Tempo Control' },
-        ],
-        hucking: [
-          { key: 'hucking_confidence', label: 'Hucking Confidence' },
-          { key: 'hucking_shape_control', label: 'Hucking Shape Control' },
-          { key: 'hucking_tempo_control', label: 'Hucking Tempo Control' },
-          { key: 'hucking_placement', label: 'Hucking Placement' },
-        ],
-      },
-    },
-    defensive: [
-      { key: 'normal_marking', label: 'Normal Marking' },
-      { key: 'sideline_trap_marking', label: 'Sideline Trap Marking' },
-      { key: 'downfield_defending', label: 'Downfield Defending' },
-      { key: 'handler_defending', label: 'Handler Defending' },
-      { key: 'defensive_pattern_recognition', label: 'Pattern Recognition' },
-      { key: 'help_defense', label: 'Help Defense' },
-      { key: 'switching_on_defense', label: 'Switching on Defense' },
-      { key: 'zone_defense', label: 'Zone Defense' },
-      { key: 'defensive_mental_fortitude', label: 'Defensive Mental Fortitude' },
-    ],
-    mental: [
-      { key: 'mental_game', label: 'Mental Game' },
-      { key: 'feedback_implementation', label: 'Feedback Implementation' },
-      { key: 'defensive_strategy', label: 'Defensive Team Strategy' },
-      { key: 'offensive_strategy', label: 'Offensive Team Strategy' },
-    ],
-  });
-
-  // Tab management
-  const [activeTab, setActiveTab] = useState('home');
-
   // Precompute main category averages for radial tabs
-  const [averages, setAverages] = useState({});
   useEffect(() => {
     if (selectedAthlete) {
       const newAverages = computeCategoryAverages(selectedAthlete);
@@ -175,6 +91,7 @@ function Dashboard() {
     'Forehand Accuracy',
     'Specialty Accuracy',
   ];
+
   const radarDataValues = selectedAthlete
     ? [
         selectedAthlete.skills.backhand_power,
@@ -205,6 +122,10 @@ function Dashboard() {
     };
   }, []);
 
+  const handleTabChange = (newTab: TabValue) => {
+    setActiveTab(newTab);
+  };
+
   return (
     <div className="min-h-screen bg-gray-900 text-gray-100 flex flex-col">
       {!isOnline && (
@@ -213,10 +134,8 @@ function Dashboard() {
         </div>
       )}
 
-      {/* Show custom InstallPrompt for PWA */}
       <InstallPrompt />
 
-      {/** Profile Header (only if selectedAthlete is available) */}
       {selectedAthlete && (
         <ProfileHeader
           name={selectedAthlete.metadata.name}
@@ -228,30 +147,25 @@ function Dashboard() {
           }
           athletes={athletes}
           selectedAthleteId={selectedAthleteId}
-          onSelectAthlete={(id) => setSelectedAthleteId(id)}
+          onSelectAthlete={setSelectedAthleteId}
         />
       )}
 
-      {/** Radial navigation row for main tabs */}
       <RadialTabs
         activeTab={activeTab}
-        onChangeTab={setActiveTab}
+        onChangeTab={handleTabChange}
         averages={averages}
       />
 
-      {/** Main content container */}
       <div className="flex-1 overflow-auto px-4 pb-8 mt-4">
-        {/** Loading indicator */}
         {loading && <LoadingState />}
 
-        {/** Error message */}
         {error && (
           <div className="bg-red-600 text-white px-4 py-2 rounded">
             {error}
           </div>
         )}
 
-        {/** Main content if data is loaded */}
         {!loading && !error && selectedAthlete && (
           <>
             {activeTab === 'home' && <HomeSection player={selectedAthlete} />}
@@ -259,7 +173,7 @@ function Dashboard() {
             {activeTab === 'physical' && (
               <CategorySection
                 title="Physical Attributes"
-                skills={getCategoryData(selectedAthlete).physical}
+                skills={CATEGORY_DATA.physical}
                 player={selectedAthlete.skills}
               />
             )}
@@ -267,7 +181,7 @@ function Dashboard() {
             {activeTab === 'offensive' && (
               <>
                 <OffensiveSection
-                  offensiveData={getCategoryData(selectedAthlete).offensive}
+                  offensiveData={CATEGORY_DATA.offensive}
                   player={selectedAthlete.skills}
                 />
                 <div className="mt-6">
@@ -282,7 +196,7 @@ function Dashboard() {
             {activeTab === 'defensive' && (
               <CategorySection
                 title="Defensive Skills"
-                skills={getCategoryData(selectedAthlete).defensive}
+                skills={CATEGORY_DATA.defensive}
                 player={selectedAthlete.skills}
               />
             )}
@@ -290,12 +204,11 @@ function Dashboard() {
             {activeTab === 'mental' && (
               <CategorySection
                 title="Mental & Recovery"
-                skills={getCategoryData(selectedAthlete).mental}
+                skills={CATEGORY_DATA.mental}
                 player={selectedAthlete.skills}
               />
             )}
 
-            {/* Roadmap Modal */}
             <RoadmapModal
               isOpen={isRoadmapOpen}
               onClose={() => setRoadmapOpen(false)}
@@ -307,6 +220,6 @@ function Dashboard() {
       </div>
     </div>
   );
-}
+};
 
 export default Dashboard;
