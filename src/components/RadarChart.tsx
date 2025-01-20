@@ -1,4 +1,4 @@
-// src/components/RadarChart.jsx
+// src/components/RadarChart.tsx
 
 import React from 'react';
 import { Radar } from 'react-chartjs-2';
@@ -10,6 +10,8 @@ import {
   Filler,
   Tooltip,
   Legend,
+  ChartOptions,
+  ChartData,
 } from 'chart.js';
 
 ChartJS.register(
@@ -21,15 +23,23 @@ ChartJS.register(
   Legend
 );
 
+interface RadarChartProps {
+  labels: string[];
+  dataValues: number[];
+  onDataPointClick?: (dataPoint: {
+    label: string;
+    value: number;
+    index: number;
+    datasetIndex: number;
+  }) => void;
+}
+
 /**
  * RadarChart Component
- * @param {Object} props - Component props
- * @param {Array} props.labels - Labels for the radar chart axes
- * @param {Array} props.dataValues - Data values for each axis
- * @param {Function} props.onDataPointClick - Callback when a data point is clicked
+ * @param {RadarChartProps} props - Component props
  */
-const RadarChart = ({ labels, dataValues, onDataPointClick }) => {
-  const data = {
+const RadarChart: React.FC<RadarChartProps> = ({ labels, dataValues, onDataPointClick }) => {
+  const data: ChartData<'radar', number[], string> = {
     labels,
     datasets: [
       {
@@ -43,13 +53,13 @@ const RadarChart = ({ labels, dataValues, onDataPointClick }) => {
         pointHoverBackgroundColor: '#fff',
         pointHoverBorderColor: 'rgba(16, 185, 129, 1)',
         pointRadius: 3, // Reduced from 5 to 3
-        pointHoverRadius: 7, // Kept or adjusted as needed
-        pointHitRadius: 10, // Maintained for consistent touch area
+        pointHoverRadius: 7, // Adjust as needed
+        pointHitRadius: 10, // Consistent touch area
       },
     ],
   };
 
-  const options = {
+  const options: ChartOptions<'radar'> = {
     responsive: true,
     maintainAspectRatio: false, // Allows the chart to fill the container
     scales: {
@@ -112,10 +122,10 @@ const RadarChart = ({ labels, dataValues, onDataPointClick }) => {
     },
     // Optional: Change cursor to pointer on hover
     onHover: (event, elements) => {
-      const target = event.native.target;
-      if (elements.length > 0) {
+      const target = event.native?.target as HTMLElement;
+      if (elements.length > 0 && target) {
         target.style.cursor = 'pointer';
-      } else {
+      } else if (target) {
         target.style.cursor = 'default';
       }
     },
