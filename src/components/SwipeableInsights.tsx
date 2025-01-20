@@ -28,13 +28,6 @@ interface InsightsCardProps {
   subtitle?: string | null;
 }
 
-interface DataPoint {
-  label: string;
-  value: number;
-  index: number;
-  datasetIndex: number;
-}
-
 // InsightsCard Component
 const InsightsCard: FC<InsightsCardProps> = ({ title, data = [], subtitle }) => (
   <div className="bg-gray-800 p-4 rounded-lg shadow-md w-full">

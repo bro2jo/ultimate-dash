@@ -81,7 +81,7 @@ export const HomeSection: React.FC<HomeSectionProps> = ({ player }) => {
     setAverages(computeCategoryAverages(player));
   }, [player]);
 
-  const labels = [...RADAR_LABELS];
+  const labels = React.useMemo(() => [...RADAR_LABELS], []);
   
   const radarDataValues = React.useMemo(() => 
     labels.map(label => 
